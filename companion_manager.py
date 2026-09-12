@@ -83,6 +83,7 @@ class CompanionManager(QObject):
         self.panel = CompanionPanel(
             on_toggle_mode=self.toggle_mode,
             on_open_settings=self.open_settings,
+            on_submit_text=self.on_text_query,
         )
         self.tray = ClickyTrayIcon(
             on_toggle_panel=self.toggle_panel,
@@ -170,6 +171,17 @@ class CompanionManager(QObject):
         # Run transcription and response pipeline in background loop
         asyncio.run_coroutine_threadsafe(self._process_turn(audio_data), self._loop)
 
+    def on_text_query(self, text: str):
+        """User typed a query or instruction directly into the HUD panel."""
+        query = text.strip()
+        if not query:
+            return
+        print(f"[CompanionManager] Typed query: '{query}'")
+        self.player.stop()
+        self.query_received.emit(query)
+        self.status_changed.emit("Thinking...", "thinking")
+        asyncio.run_coroutine_threadsafe(self._process_query_turn(query), self._loop)
+
     def on_cancel(self):
         """Instant interrupt on Esc."""
         print("[CompanionManager] Cancel triggered.")
@@ -186,25 +198,27 @@ class CompanionManager(QObject):
             self.status_changed.emit("Didn't catch that", "normal")
             return
 
-        print(f"[CompanionManager] User query: '{transcription}'")
+        print(f"[CompanionManager] Spoken query: '{transcription}'")
         self.query_received.emit(transcription)
+        await self._process_query_turn(transcription)
 
+    async def _process_query_turn(self, query: str):
         # 2. Check for quick commands
-        if is_stop(transcription):
+        if is_stop(query):
             self.on_cancel()
             return
 
-        if is_repeat(transcription) and self.last_answer:
+        if is_repeat(query) and self.last_answer:
             await self._speak_response(self.last_answer)
             return
 
         # 3. Detect Agent Mode activation
-        is_agent_query = self.is_agent_mode or is_agent(transcription)
+        is_agent_query = self.is_agent_mode or is_agent(query)
 
         if is_agent_query:
-            await self._run_agent_pipeline(transcription)
+            await self._run_agent_pipeline(query)
         else:
-            await self._run_talk_pipeline(transcription)
+            await self._run_talk_pipeline(query)
 
     async def _run_talk_pipeline(self, query: str):
         # 1. Capture screen context

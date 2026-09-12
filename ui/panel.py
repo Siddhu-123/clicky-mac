@@ -11,6 +11,7 @@ from PyQt6.QtWidgets import (
     QFrame,
     QHBoxLayout,
     QLabel,
+    QLineEdit,
     QPushButton,
     QScrollArea,
     QSizePolicy,
@@ -24,10 +25,11 @@ from config import cfg
 class CompanionPanel(QWidget):
     """Floating HUD companion panel matching macOS dark design."""
 
-    def __init__(self, on_toggle_mode=None, on_open_settings=None):
+    def __init__(self, on_toggle_mode=None, on_open_settings=None, on_submit_text=None):
         super().__init__()
         self.on_toggle_mode = on_toggle_mode
         self.on_open_settings = on_open_settings
+        self.on_submit_text = on_submit_text
 
         self.setWindowFlags(
             Qt.WindowType.FramelessWindowHint
@@ -35,7 +37,7 @@ class CompanionPanel(QWidget):
             | Qt.WindowType.SubWindow
         )
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground, True)
-        self.resize(360, 260)
+        self.resize(360, 310)
 
         # Drag state
         self._drag_pos = QPoint()
@@ -167,12 +169,61 @@ class CompanionPanel(QWidget):
         self.scroll.setWidget(self.answer_label)
         card_layout.addWidget(self.scroll, 1)
 
+        # ── Text Input Line for Typing ──
+        input_layout = QHBoxLayout()
+        input_layout.setSpacing(6)
+
+        self.input_field = QLineEdit(self.card)
+        self.input_field.setPlaceholderText("Type a question or agent task (Enter)...")
+        self.input_field.setStyleSheet("""
+            QLineEdit {
+                background-color: rgba(15, 23, 42, 0.7);
+                color: #F8FAFC;
+                border: 1px solid rgba(255, 255, 255, 0.15);
+                border-radius: 8px;
+                padding: 6px 10px;
+                font-size: 12px;
+            }
+            QLineEdit:focus {
+                border: 1px solid #3B82F6;
+                background-color: rgba(15, 23, 42, 0.95);
+            }
+        """)
+        self.input_field.returnPressed.connect(self._on_enter_pressed)
+        input_layout.addWidget(self.input_field, 1)
+
+        send_btn = QPushButton("↑", self.card)
+        send_btn.setFixedSize(28, 28)
+        send_btn.setStyleSheet("""
+            QPushButton {
+                background-color: #2563EB;
+                color: white;
+                border: none;
+                border-radius: 14px;
+                font-weight: 800;
+                font-size: 14px;
+            }
+            QPushButton:hover {
+                background-color: #1D4ED8;
+            }
+        """)
+        send_btn.clicked.connect(self._on_enter_pressed)
+        input_layout.addWidget(send_btn)
+
+        card_layout.addLayout(input_layout)
+
         # ── Footer: Model info ──
         self.footer_label = QLabel(f"Model: {cfg.active_provider.title()}", self.card)
         self.footer_label.setStyleSheet("color: #64748B; font-size: 10px; border: none;")
         card_layout.addWidget(self.footer_label)
 
         root_layout.addWidget(self.card)
+
+    def _on_enter_pressed(self):
+        text = self.input_field.text().strip()
+        if text and hasattr(self, "on_submit_text") and self.on_submit_text:
+            self.input_field.clear()
+            self.on_submit_text(text)
 
     def set_status(self, text: str, state: str = "normal"):
         self.status_pill.setText(text)
