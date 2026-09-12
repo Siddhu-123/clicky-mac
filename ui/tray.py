@@ -122,6 +122,7 @@ class ClickyTrayIcon(QSystemTrayIcon):
             ("ollama", "Ollama (Local Offline)"),
             ("openai", "OpenAI (GPT-4o)"),
             ("claude", "Anthropic Claude 3.5"),
+            ("demo", "Demo Mode (Instant Test)"),
         ]
 
         for p_id, p_name in providers:

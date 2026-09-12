@@ -94,7 +94,13 @@ class SettingsDialog(QDialog):
         ai_form.setSpacing(8)
 
         self.provider_combo = QComboBox(self)
-        self.provider_combo.addItems(["Gemini (Free Cloud)", "Ollama (Local Offline)", "OpenAI", "Claude"])
+        self.provider_combo.addItems([
+            "Gemini (Free Cloud)",
+            "Ollama (Local Offline)",
+            "OpenAI",
+            "Claude",
+            "Demo (Test Pointing & TTS)",
+        ])
         self.provider_combo.currentIndexChanged.connect(self._on_provider_changed)
         ai_form.addRow("Active Provider:", self.provider_combo)
 
@@ -183,6 +189,9 @@ class SettingsDialog(QDialog):
             self.provider_combo.setCurrentIndex(3)
             self.model_input.setText(cfg.claude_model)
             self.api_key_input.setText(cfg.anthropic_api_key)
+        elif p == "demo":
+            self.provider_combo.setCurrentIndex(4)
+            self.model_input.setText("demo-mode")
 
         self.ollama_host_input.setText(cfg.ollama_host)
         self.hotkey_input.setText(cfg.hotkey)
@@ -196,10 +205,11 @@ class SettingsDialog(QDialog):
 
     def _on_provider_changed(self, index: int):
         is_ollama = (index == 1)
+        is_demo = (index == 4)
         self.ollama_label.setVisible(is_ollama)
         self.ollama_host_input.setVisible(is_ollama)
-        self.api_key_label.setVisible(not is_ollama)
-        self.api_key_input.setVisible(not is_ollama)
+        self.api_key_label.setVisible(not is_ollama and not is_demo)
+        self.api_key_input.setVisible(not is_ollama and not is_demo)
 
         # Update placeholder / default model
         if index == 0:
@@ -213,10 +223,12 @@ class SettingsDialog(QDialog):
         elif index == 3:
             self.model_input.setText(cfg.claude_model or "claude-3-5-sonnet-20241022")
             self.api_key_input.setText(cfg.anthropic_api_key)
+        elif index == 4:
+            self.model_input.setText("demo-mode")
 
     def _save_values(self):
         idx = self.provider_combo.currentIndex()
-        providers = ["gemini", "ollama", "openai", "claude"]
+        providers = ["gemini", "ollama", "openai", "claude", "demo"]
         chosen_provider = providers[idx]
 
         model_id = self.model_input.text().strip()

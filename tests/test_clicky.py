@@ -91,6 +91,17 @@ class TestClickyMacOS(unittest.TestCase):
         apple_res = AgentTools.run_applescript('return "AppleScript OK"')
         self.assertEqual(apple_res, "AppleScript OK")
 
+    def test_mock_demo_provider(self):
+        from ai.mock_provider import MockDemoProvider
+        provider = MockDemoProvider()
+        self.assertEqual(provider.provider_name, "demo")
+
+        async def _test():
+            resp = await provider.ask("Where is the save button?", "")
+            self.assertIn("[POINT:", resp)
+            self.assertIn("[ARROW:", resp)
+        asyncio.run(_test())
+
 
 if __name__ == "__main__":
     unittest.main()

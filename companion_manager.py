@@ -20,6 +20,7 @@ from agent.runtime import AgentRuntime
 from ai.base_provider import BaseAIProvider
 from ai.claude_provider import ClaudeProvider
 from ai.gemini_provider import GeminiProvider
+from ai.mock_provider import MockDemoProvider
 from ai.ollama_provider import OllamaProvider
 from ai.openai_provider import OpenAIProvider
 from ai.universal_locator import UniversalLocator
@@ -140,7 +141,11 @@ class CompanionManager(QObject):
 
     def get_active_provider(self) -> BaseAIProvider:
         p = cfg.active_provider.lower()
-        if p == "gemini":
+        if p == "demo":
+            return MockDemoProvider()
+        elif p == "gemini":
+            if not cfg.gemini_api_key:
+                return MockDemoProvider()
             return GeminiProvider()
         elif p == "ollama":
             return OllamaProvider()
@@ -148,7 +153,7 @@ class CompanionManager(QObject):
             return OpenAIProvider()
         elif p == "claude":
             return ClaudeProvider()
-        return GeminiProvider()
+        return MockDemoProvider()
 
     # ── Push-to-Talk Lifecycle ──
 
