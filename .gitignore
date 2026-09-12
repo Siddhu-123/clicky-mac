@@ -1,0 +1,29 @@
+# Virtual environment
+.venv/
+env/
+venv/
+
+# Python bytecode
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Environment & local secrets
+.env
+.env.local
+secrets.env
+
+# macOS metadata
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# Audio temp caches
+*.mp3
+*.aiff
+*.wav
+clicky_tts_*
+
+# IDEs
+.vscode/
+.idea/
