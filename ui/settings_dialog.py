@@ -1,6 +1,6 @@
 """
-Settings Dialog for Clicky macOS.
-Allows user to easily switch AI providers, choose models, configure API keys and TTS voices.
+Settings Dialog for Clicky macOS (Apple MLX Edition).
+Configure MLX Qwen model, voice, and push-to-talk hotkey.
 """
 
 from __future__ import annotations
@@ -20,13 +20,20 @@ from PyQt6.QtWidgets import (
 
 from config import cfg, cfg_manager
 
+MLX_PRESETS = [
+    ("mlx-community/Qwen2-VL-2B-Instruct-4bit", "Qwen2-VL 2B 4-bit (Fastest, ~1.8 GB RAM) [Default]"),
+    ("mlx-community/Qwen2.5-VL-3B-Instruct-4bit", "Qwen2.5-VL 3B 4-bit (Higher detail, ~2.5 GB RAM)"),
+    ("mlx-community/Qwen2.5-VL-7B-Instruct-4bit", "Qwen2.5-VL 7B 4-bit (Maximum reasoning, ~5.5 GB RAM)"),
+    ("custom", "Custom HuggingFace / Local Path..."),
+]
+
 
 class SettingsDialog(QDialog):
     def __init__(self, parent=None, on_saved=None):
         super().__init__(parent)
         self.on_saved = on_saved
-        self.setWindowTitle("Clicky Settings")
-        self.setFixedSize(460, 480)
+        self.setWindowTitle("Clicky Settings (Apple MLX)")
+        self.setFixedSize(450, 420)
         self.setStyleSheet("""
             QDialog {
                 background-color: #1E293B;
@@ -86,47 +93,33 @@ class SettingsDialog(QDialog):
 
     def _build_ui(self):
         layout = QVBoxLayout(self)
-        layout.setSpacing(12)
+        layout.setSpacing(14)
 
-        # ── AI Provider & Models ──
-        ai_group = QGroupBox("AI Provider & Model", self)
-        ai_form = QFormLayout(ai_group)
-        ai_form.setSpacing(8)
+        # ── Apple Silicon MLX Model ──
+        mlx_group = QGroupBox("Apple Silicon MLX Engine", self)
+        mlx_form = QFormLayout(mlx_group)
+        mlx_form.setSpacing(8)
 
-        self.provider_combo = QComboBox(self)
-        self.provider_combo.addItems([
-            "Gemini (Free Cloud)",
-            "Ollama (Local Offline)",
-            "OpenAI",
-            "Claude",
-            "Demo (Test Pointing & TTS)",
-        ])
-        self.provider_combo.currentIndexChanged.connect(self._on_provider_changed)
-        ai_form.addRow("Active Provider:", self.provider_combo)
+        self.model_combo = QComboBox(self)
+        for model_id, label in MLX_PRESETS:
+            self.model_combo.addItem(label, model_id)
+        self.model_combo.currentIndexChanged.connect(self._on_preset_changed)
+        mlx_form.addRow("Model Preset:", self.model_combo)
 
-        self.model_input = QLineEdit(self)
-        ai_form.addRow("Model ID:", self.model_input)
+        self.custom_model_input = QLineEdit(self)
+        self.custom_model_input.setPlaceholderText("e.g. mlx-community/Qwen2-VL-2B-Instruct-4bit")
+        mlx_form.addRow("Model Identifier:", self.custom_model_input)
 
-        self.api_key_input = QLineEdit(self)
-        self.api_key_input.setEchoMode(QLineEdit.EchoMode.Password)
-        self.api_key_label = QLabel("API Key:")
-        ai_form.addRow(self.api_key_label, self.api_key_input)
+        info_label = QLabel("Runs directly on Apple Silicon GPU via Metal with zero cloud lag.", self)
+        info_label.setStyleSheet("color: #60A5FA; font-size: 11px; font-style: italic;")
+        mlx_form.addRow("", info_label)
 
-        self.ollama_host_input = QLineEdit(self)
-        self.ollama_host_input.setPlaceholderText("http://localhost:11434")
-        self.ollama_label = QLabel("Ollama URL:")
-        ai_form.addRow(self.ollama_label, self.ollama_host_input)
+        layout.addWidget(mlx_group)
 
-        layout.addWidget(ai_group)
-
-        # ── Voice & Speech ──
-        voice_group = QGroupBox("Voice & Audio", self)
+        # ── Voice & Audio ──
+        voice_group = QGroupBox("Voice & Speech", self)
         voice_form = QFormLayout(voice_group)
         voice_form.setSpacing(8)
-
-        self.tts_combo = QComboBox(self)
-        self.tts_combo.addItems(["Edge TTS (Free 400+ Voices)", "macOS Native Voice (say)"])
-        voice_form.addRow("TTS Engine:", self.tts_combo)
 
         self.voice_combo = QComboBox(self)
         self.voice_combo.addItems([
@@ -137,22 +130,18 @@ class SettingsDialog(QDialog):
             "en-GB-SoniaNeural",
             "en-AU-NatashaNeural",
         ])
-        voice_form.addRow("Edge Voice:", self.voice_combo)
-
-        self.stt_combo = QComboBox(self)
-        self.stt_combo.addItems(["faster-whisper (Local base.en)", "faster-whisper (Local tiny.en)"])
-        voice_form.addRow("Speech-to-Text:", self.stt_combo)
+        voice_form.addRow("Edge Neural Voice:", self.voice_combo)
 
         layout.addWidget(voice_group)
 
-        # ── Shortcuts & Mode ──
-        pref_group = QGroupBox("Preferences & Hotkey", self)
+        # ── Shortcut ──
+        pref_group = QGroupBox("Shortcut", self)
         pref_form = QFormLayout(pref_group)
         pref_form.setSpacing(8)
 
         self.hotkey_input = QLineEdit(self)
         self.hotkey_input.setPlaceholderText("ctrl+alt")
-        pref_form.addRow("Push-to-Talk Hotkey:", self.hotkey_input)
+        pref_form.addRow("Push-to-Talk:", self.hotkey_input)
 
         layout.addWidget(pref_group)
 
@@ -172,91 +161,49 @@ class SettingsDialog(QDialog):
         layout.addLayout(btn_layout)
 
     def _load_values(self):
-        # Set provider
-        p = cfg.active_provider.lower()
-        if p == "gemini":
-            self.provider_combo.setCurrentIndex(0)
-            self.model_input.setText(cfg.gemini_model)
-            self.api_key_input.setText(cfg.gemini_api_key)
-        elif p == "ollama":
-            self.provider_combo.setCurrentIndex(1)
-            self.model_input.setText(cfg.ollama_model)
-        elif p == "openai":
-            self.provider_combo.setCurrentIndex(2)
-            self.model_input.setText(cfg.openai_model)
-            self.api_key_input.setText(cfg.openai_api_key)
-        elif p == "claude":
-            self.provider_combo.setCurrentIndex(3)
-            self.model_input.setText(cfg.claude_model)
-            self.api_key_input.setText(cfg.anthropic_api_key)
-        elif p == "demo":
-            self.provider_combo.setCurrentIndex(4)
-            self.model_input.setText("demo-mode")
+        # Match current config model to preset
+        current_m = cfg.mlx_model
+        matched_idx = -1
+        for i, (m_id, _) in enumerate(MLX_PRESETS):
+            if m_id == current_m:
+                matched_idx = i
+                break
 
-        self.ollama_host_input.setText(cfg.ollama_host)
+        if matched_idx >= 0:
+            self.model_combo.setCurrentIndex(matched_idx)
+            self.custom_model_input.setText(current_m)
+            self.custom_model_input.setEnabled(False)
+        else:
+            self.model_combo.setCurrentIndex(len(MLX_PRESETS) - 1)  # custom
+            self.custom_model_input.setText(current_m)
+            self.custom_model_input.setEnabled(True)
+
         self.hotkey_input.setText(cfg.hotkey)
 
-        # Voice
         idx = self.voice_combo.findText(cfg.edge_voice)
         if idx >= 0:
             self.voice_combo.setCurrentIndex(idx)
 
-        self._on_provider_changed(self.provider_combo.currentIndex())
-
-    def _on_provider_changed(self, index: int):
-        is_ollama = (index == 1)
-        is_demo = (index == 4)
-        self.ollama_label.setVisible(is_ollama)
-        self.ollama_host_input.setVisible(is_ollama)
-        self.api_key_label.setVisible(not is_ollama and not is_demo)
-        self.api_key_input.setVisible(not is_ollama and not is_demo)
-
-        # Update placeholder / default model
-        if index == 0:
-            self.model_input.setText(cfg.gemini_model or "gemini-2.5-flash")
-            self.api_key_input.setText(cfg.gemini_api_key)
-        elif index == 1:
-            self.model_input.setText(cfg.ollama_model or "llama3.2-vision")
-        elif index == 2:
-            self.model_input.setText(cfg.openai_model or "gpt-4o")
-            self.api_key_input.setText(cfg.openai_api_key)
-        elif index == 3:
-            self.model_input.setText(cfg.claude_model or "claude-3-5-sonnet-20241022")
-            self.api_key_input.setText(cfg.anthropic_api_key)
-        elif index == 4:
-            self.model_input.setText("demo-mode")
+    def _on_preset_changed(self, index: int):
+        m_id = self.model_combo.currentData()
+        if m_id == "custom":
+            self.custom_model_input.setEnabled(True)
+        else:
+            self.custom_model_input.setText(m_id)
+            self.custom_model_input.setEnabled(False)
 
     def _save_values(self):
-        idx = self.provider_combo.currentIndex()
-        providers = ["gemini", "ollama", "openai", "claude", "demo"]
-        chosen_provider = providers[idx]
+        m_id = self.model_combo.currentData()
+        final_model = self.custom_model_input.text().strip() if m_id == "custom" else m_id
 
-        model_id = self.model_input.text().strip()
-        api_key = self.api_key_input.text().strip()
-        ollama_host = self.ollama_host_input.text().strip() or "http://localhost:11434"
         hotkey_str = self.hotkey_input.text().strip() or "ctrl+alt"
         chosen_voice = self.voice_combo.currentText()
 
-        updates = {
-            "active_provider": chosen_provider,
-            "ollama_host": ollama_host,
-            "hotkey": hotkey_str,
-            "edge_voice": chosen_voice,
-        }
-
-        if chosen_provider == "gemini":
-            updates["gemini_model"] = model_id
-            updates["gemini_api_key"] = api_key
-        elif chosen_provider == "ollama":
-            updates["ollama_model"] = model_id
-        elif chosen_provider == "openai":
-            updates["openai_model"] = model_id
-            updates["openai_api_key"] = api_key
-        elif chosen_provider == "claude":
-            updates["claude_model"] = model_id
-            updates["anthropic_api_key"] = api_key
-
-        cfg_manager.update(**updates)
+        cfg_manager.update(
+            mlx_model=final_model,
+            hotkey=hotkey_str,
+            edge_voice=chosen_voice,
+        )
 
         if self.on_saved:
             self.on_saved()

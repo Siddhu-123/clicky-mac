@@ -213,7 +213,8 @@ class CompanionPanel(QWidget):
         card_layout.addLayout(input_layout)
 
         # ── Footer: Model info ──
-        self.footer_label = QLabel(f"Model: {cfg.active_provider.title()}", self.card)
+        short_name = cfg.mlx_model.split("/")[-1].replace("-Instruct", "").replace("-4bit", " 4-bit")
+        self.footer_label = QLabel(f"Apple MLX: {short_name}", self.card)
         self.footer_label.setStyleSheet("color: #64748B; font-size: 10px; border: none;")
         card_layout.addWidget(self.footer_label)
 

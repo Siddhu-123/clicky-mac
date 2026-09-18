@@ -1,4 +1,8 @@
-# Core Desktop UI & macOS Integration
+# Native Apple Silicon MLX Framework
+mlx>=0.30.0
+mlx-vlm>=0.7.0
+
+# Desktop UI & macOS Integration
 PyQt6>=6.6.0
 pyobjc-framework-Cocoa>=12.0
 pyobjc-framework-Quartz>=12.0
@@ -13,16 +17,12 @@ sounddevice>=0.5.0
 soundfile>=0.12.0
 numpy>=1.26.0
 
-# Speech-to-Text (STT) - Local & Free
+# Speech-to-Text (Apple Silicon on-device)
 faster-whisper>=1.0.0
 
-# Text-to-Speech (TTS) - Free & Neural
+# Text-to-Speech (Free & Neural)
 edge-tts>=7.0.0
 
-# AI Providers (Cloud & Local)
+# Utilities
 httpx>=0.27.0
-aiohttp>=3.9.0
 python-dotenv>=1.0.0
-ollama>=0.6.0
-openai>=1.40.0
-anthropic>=0.34.0

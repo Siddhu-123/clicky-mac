@@ -1,5 +1,5 @@
 """
-Automated unit tests for Clicky macOS modules.
+Automated unit tests for Clicky macOS (Apple MLX Edition).
 """
 
 import asyncio
@@ -15,13 +15,14 @@ from ai.universal_locator import UniversalLocator
 from ai.web_search import WebSearcher
 from audio.tts.edge_tts_provider import EdgeTTSProvider, clean_text_for_speech
 from agent.tools import AgentTools
+from ai.mlx_engine import MLXEngine
 
 
 class TestClickyMacOS(unittest.TestCase):
     def test_config_manager(self):
         cm = ConfigManager()
         self.assertIsNotNone(cm.config)
-        self.assertIn(cm.config.active_provider, ["gemini", "ollama", "openai", "claude"])
+        self.assertIn("Qwen", cm.config.mlx_model)
 
     def test_tutor_classifiers(self):
         self.assertTrue(is_locate("where is the save button?"))
@@ -48,6 +49,7 @@ class TestClickyMacOS(unittest.TestCase):
         self.assertGreater(sc.width, 0)
         self.assertGreater(sc.height, 0)
         self.assertIsNotNone(sc.base64_jpeg)
+        self.assertIsNotNone(sc.pil_image)
 
     def test_universal_locator(self):
         screens = capture_all_screens(max_width=800)
@@ -91,16 +93,10 @@ class TestClickyMacOS(unittest.TestCase):
         apple_res = AgentTools.run_applescript('return "AppleScript OK"')
         self.assertEqual(apple_res, "AppleScript OK")
 
-    def test_mock_demo_provider(self):
-        from ai.mock_provider import MockDemoProvider
-        provider = MockDemoProvider()
-        self.assertEqual(provider.provider_name, "demo")
-
-        async def _test():
-            resp = await provider.ask("Where is the save button?", "")
-            self.assertIn("[POINT:", resp)
-            self.assertIn("[ARROW:", resp)
-        asyncio.run(_test())
+    def test_mlx_engine_instantiation(self):
+        engine = MLXEngine()
+        self.assertEqual(engine.provider_name, "mlx")
+        self.assertIn("Qwen", engine.model_id)
 
 
 if __name__ == "__main__":

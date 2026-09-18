@@ -1,8 +1,17 @@
-# Clicky for macOS 🔵
+# Clicky for macOS (Apple MLX Edition) 🔵
 
-> **An AI cursor companion, teacher, and autonomous agent for macOS.**  
-> Inspired by [HeyClicky](https://www.heyclicky.com) and the Windows port of [Clicky](https://clicky.foo).  
-> Delivers the full **HeyClicky Max** experience ($100/month commercial tier: Talk Mode + Autonomous Agent Mode) **100% free** using local and open-tier models.
+> **An ultra-fast, local AI cursor companion & autonomous agent for Apple Silicon Macs.**  
+> Powered by **Apple MLX** and **Qwen-VL 2B/3B** (4-bit). Runs 100% on-device on your Mac's GPU via Metal.  
+> Combines the smooth visual pointing and tutor experience of [Clicky](https://clicky.foo) with the full capabilities of **HeyClicky Max** (Talk Mode + Autonomous Agent Mode) **100% free with zero cloud dependencies**.
+
+---
+
+## Why Apple MLX + Qwen-VL?
+
+- **Zero Memory Copy Overhead**: MLX leverages Apple Silicon's **Unified Memory Architecture**. The CPU and GPU share the exact same memory buffers.
+- **Native Metal GPU Acceleration**: Model inference runs directly on Apple Metal GPU kernels (`Device(gpu, 0)`).
+- **Featherweight Footprint**: The 4-bit 2B model consumes only **~1.8 GB of RAM**, running at **80–120+ tokens/sec** with sub-second response times.
+- **100% Private & Offline**: No cloud APIs, no network latency, no subscriptions, and zero external servers needed.
 
 ---
 
@@ -16,7 +25,7 @@
 │          (floats next to your real pointer)             │
 │                                                         │
 │  ┌───────────────────────────────────┐                  │
-│  │ Clicky  [Gemini 2.5 Flash]   Talk │ ← HUD Panel      │
+│  │ Clicky  [MLX: Qwen2-VL 2B]   Talk │ ← HUD Panel      │
 │  │ ● Speaking…                       │                  │
 │  │ "The Save button is right here ↗" │                  │
 │  │ [Points with pulsing blue ring]   │                  │
@@ -24,26 +33,23 @@
 └─────────────────────────────────────────────────────────┘
 ```
 
-1. **Talk Mode (Free & Unlimited)**:
-   - Hold **Control + Option** and talk. Clicky observes your screen, listens to your voice, and answers with natural voice.
-   - **Smooth Visual Pointing**: The blue triangle flies along a smooth cubic-bezier arc to target buttons or menus, dwells with a pulsing highlight ring, and returns to your cursor.
-   - **Whiteboard Annotations**: Draws animated arrows (`[ARROW]`), pulsing circles (`[CIRCLE]`), and labels (`[LABEL]`) directly on your display.
-   - **Two-Stage Grid Locator**: Pinpoints exact pixels on any screen resolution without needing specialized vision weights.
-   - Press **Escape** at any time to instantly stop speech or dismiss annotations.
+1. **Talk Mode (Tutor & Pointing)**:
+   - Hold **`Control + Option`** and speak, or type into the HUD panel and hit `Enter`.
+   - Clicky's blue triangle buddy flies along a smooth cubic-bezier arc to target buttons or menus, dwells with a pulsing highlight ring, and returns to your cursor.
+   - Whiteboard annotations: draws arrows (`[ARROW]`), pulsing circles (`[CIRCLE]`), and labels (`[LABEL]`) directly over your apps.
+   - Press **`Esc`** at any time to instantly cancel speech or dismiss annotations.
 
-2. **Agent Mode (HeyClicky Max Feature - Free)**:
-   - Activate by saying **"HeyClicky agent [task]"** or clicking the **Talk / Agent** button in the HUD panel or menu bar.
+2. **Agent Mode (HeyClicky Max Feature)**:
+   - Click the **Talk / Agent** button in the HUD panel or say *"HeyClicky agent [task]"*.
    - Executes autonomous multi-step tasks across macOS:
-     - Runs safe terminal commands in macOS zsh.
-     - Reads, edits, and writes project files.
-     - Performs real-time web research via DuckDuckGo.
-     - Automates Mac apps via AppleScript and simulated clicks/keystrokes.
+     - Safe terminal commands in macOS `zsh`.
+     - Project file reading, editing, and creation.
+     - Real-time web research via DuckDuckGo.
+     - Mac application automation via AppleScript and simulated clicks/keystrokes.
 
-3. **100% Free Default Stack**:
-   - **Speech-to-Text**: Local `faster-whisper` running on Apple Silicon (0 cost, offline).
-   - **Text-to-Speech**: Microsoft Edge Neural TTS with 400+ natural voices (0 cost, zero API keys needed).
-   - **Vision & Intelligence**: Ready for Google Gemini (generous free tier), Ollama (100% local offline), OpenAI, or Claude.
-   - **Web Search**: Built-in DuckDuckGo scraping (no search API keys required).
+3. **100% Free & Local Speech Stack**:
+   - **STT**: On-device `faster-whisper` running with Apple Silicon NEON acceleration.
+   - **TTS**: High-fidelity Microsoft Edge Neural TTS (400+ voices, 0 keys needed) with macOS native `say` fallback.
 
 ---
 
@@ -51,96 +57,47 @@
 
 ### 1. Launch Clicky
 
-Open your terminal in this directory and run:
+Open your terminal in this repository and run:
 
 ```bash
+cd /Users/sidslaptop/dev/clicky-mac
 ./run.sh
 ```
 
-The script will automatically activate the Python virtual environment and start Clicky.
+*(On the very first launch, MLX will download the lightweight 4-bit weights from Hugging Face and cache them locally in `~/.cache/huggingface/hub/`.)*
 
-### 2. macOS System Permissions
+### 2. Permissions (First time only)
 
-On first run, macOS will prompt for permissions (or you can enable them in **System Settings → Privacy & Security**):
-- **Accessibility**: Required for the global `Control + Option` shortcut and computer-use automation.
+When prompted by macOS (or in **System Settings → Privacy & Security**):
+- **Accessibility**: Required for the `Control + Option` global shortcut and automated clicks.
 - **Screen Recording**: Required for Clicky to capture your screen when you ask questions.
-- **Microphone**: Required for push-to-talk audio capture.
+- **Microphone**: Required for push-to-talk voice capture.
 
 ---
 
-## Hotkeys & Controls
+## Controls
 
-| Shortcut / Action | What It Does |
+| Action | What It Does |
 | :--- | :--- |
 | **Hold `Control + Option`** | Push-to-talk voice query (releases to process). |
+| **Type in HUD Panel + `Enter`** | Instant text input without speaking. |
 | **Press `Esc`** | Instantly stop speech and clear screen annotations. |
-| **Click Menu Bar Icon 🔵** | Open Clicky menu bar controls & provider switcher. |
-| **"Talk" / "Agent" Button** | Toggle between conversational tutor and autonomous agent. |
+| **Click Menu Bar Icon (🔵)** | Toggle HUD, switch modes, or open Settings. |
+| **"Talk / Agent" Button** | Switch between tutor conversation and autonomous agent. |
 
 ---
 
-## Switching AI Models & Providers
+## Model Selection
 
-You can switch models and providers on the fly from the **Menu Bar Icon → AI Provider** or via **Settings**:
-
-### 1. Google Gemini (Free Cloud Tier)
-- High-speed multimodal screen analysis and reasoning with generous free quota.
-- Set your key in Settings or add to `.env`:
-  ```bash
-  GEMINI_API_KEY=AIzaSy...
-  ```
-
-### 2. Ollama (100% Offline & Private)
-- Run local vision models on Apple Silicon GPU via Metal:
-  ```bash
-  ollama run llama3.2-vision
-  ```
-- No internet connection or API keys required.
-
-### 3. OpenAI / Claude (BYOK)
-- OpenAI GPT-4o (`OPENAI_API_KEY=...`)
-- Anthropic Claude 3.5 Sonnet (`ANTHROPIC_API_KEY=...`)
+You can choose your MLX model in **Settings (⚙)**:
+- **`mlx-community/Qwen2-VL-2B-Instruct-4bit`** *(Default — Fastest, ~1.8 GB RAM)*
+- **`mlx-community/Qwen2.5-VL-3B-Instruct-4bit`** *(Higher detail, ~2.5 GB RAM)*
+- **`mlx-community/Qwen2.5-VL-7B-Instruct-4bit`** *(Maximum reasoning, ~5.5 GB RAM)*
+- **Custom Model**: Any MLX-compatible VLM from HuggingFace or a local folder.
 
 ---
 
-## Architecture
-
-```
-clicky-mac/
-├── config.py                 # Configuration & settings management (~/.config/clicky/)
-├── hotkey.py                 # macOS global shortcuts via pynput & Quartz
-├── tutor.py                  # Active window detection (NSWorkspace) & intent classification
-├── companion_manager.py      # Core orchestrator connecting audio, screen, AI, and UI
-├── main.py                   # Application entrypoint & macOS permissions preflight
-├── run.sh                    # Launcher script
-├── screen/
-│   └── capture.py            # Multi-monitor Retina-aware screenshot capture
-├── ai/
-│   ├── base_provider.py      # Abstract multimodal AI provider interface
-│   ├── gemini_provider.py    # Google Gemini Flash provider
-│   ├── ollama_provider.py    # Local Ollama provider
-│   ├── openai_provider.py    # OpenAI provider
-│   ├── claude_provider.py    # Anthropic Claude provider
-│   ├── universal_locator.py  # Two-stage visual grid locator (12x8 coarse + 6x6 fine)
-│   └── web_search.py         # Free DuckDuckGo real-time web search
-├── audio/
-│   ├── capture.py            # Sounddevice microphone input stream
-│   ├── playback.py           # Native macOS afplay audio player with instant cancellation
-│   ├── tts/                  # Microsoft Edge Neural TTS + macOS native `say` fallback
-│   └── stt/                  # Local faster-whisper on Apple Silicon
-├── agent/
-│   ├── runtime.py            # HeyClicky Max autonomous execution loop
-│   └── tools.py              # Shell execution, file I/O, AppleScript, computer use
-└── ui/
-    ├── overlay.py            # Transparent canvas: blue buddy triangle, bezier arc, annotations
-    ├── panel.py              # Floating HUD window with live transcript & answers
-    ├── tray.py               # macOS top menu bar item & controls
-    └── settings_dialog.py    # Interactive settings dialog
-```
-
----
-
-## Testing
+## Verification
 
 Run the automated test suite:
 

@@ -1,15 +1,15 @@
 """
-macOS Menu Bar Extra (System Tray) for Clicky.
-Provides quick controls, provider switching, and mode toggles from the top menu bar.
+macOS Menu Bar Extra (System Tray) for Clicky (Apple MLX Edition).
+Provides quick controls, mode toggles, and settings directly from the macOS menu bar.
 """
 
 from __future__ import annotations
 
-from PyQt6.QtCore import QPoint, Qt
-from PyQt6.QtGui import QAction, QActionGroup, QColor, QIcon, QPainter, QPixmap
+from PyQt6.QtCore import Qt
+from PyQt6.QtGui import QAction, QColor, QIcon, QPainter, QPainterPath, QPixmap
 from PyQt6.QtWidgets import QMenu, QSystemTrayIcon
 
-from config import cfg, cfg_manager
+from config import cfg
 
 
 def create_tray_icon() -> QIcon:
@@ -26,7 +26,6 @@ def create_tray_icon() -> QIcon:
     painter.drawEllipse(2, 2, 28, 28)
 
     # Inner white pointer
-    from PyQt6.QtGui import QPainterPath
     path = QPainterPath()
     path.moveTo(10, 8)
     path.lineTo(22, 16)
@@ -51,7 +50,7 @@ class ClickyTrayIcon(QSystemTrayIcon):
         on_quit=None,
     ):
         super().__init__(create_tray_icon())
-        self.setToolTip("Clicky — AI Cursor Companion (Mac)")
+        self.setToolTip("Clicky — AI Cursor Companion (Apple MLX)")
 
         self.on_toggle_panel = on_toggle_panel
         self.on_toggle_mode = on_toggle_mode
@@ -93,7 +92,7 @@ class ClickyTrayIcon(QSystemTrayIcon):
         """)
 
         # Status Header
-        self.status_action = QAction("Clicky: Ready", menu)
+        self.status_action = QAction("Clicky: Ready (Apple MLX)", menu)
         self.status_action.setEnabled(False)
         menu.addAction(self.status_action)
 
@@ -110,29 +109,6 @@ class ClickyTrayIcon(QSystemTrayIcon):
         if self.on_toggle_panel:
             toggle_panel_action.triggered.connect(self.on_toggle_panel)
         menu.addAction(toggle_panel_action)
-
-        menu.addSeparator()
-
-        # Quick Provider Switcher
-        provider_menu = menu.addMenu("AI Provider")
-        self.provider_group = QActionGroup(self)
-
-        providers = [
-            ("gemini", "Google Gemini (Free Cloud)"),
-            ("ollama", "Ollama (Local Offline)"),
-            ("openai", "OpenAI (GPT-4o)"),
-            ("claude", "Anthropic Claude 3.5"),
-            ("demo", "Demo Mode (Instant Test)"),
-        ]
-
-        for p_id, p_name in providers:
-            act = QAction(p_name, provider_menu, checkable=True)
-            act.setData(p_id)
-            if cfg.active_provider == p_id:
-                act.setChecked(True)
-            act.triggered.connect(lambda checked, pid=p_id: self._on_select_provider(pid))
-            self.provider_group.addAction(act)
-            provider_menu.addAction(act)
 
         menu.addSeparator()
 
@@ -157,10 +133,6 @@ class ClickyTrayIcon(QSystemTrayIcon):
         menu.addAction(quit_action)
 
         self.setContextMenu(menu)
-
-    def _on_select_provider(self, provider_id: str):
-        cfg_manager.update(active_provider=provider_id)
-        print(f"[Tray] Switched provider to {provider_id}")
 
     def update_mode_label(self, is_agent: bool):
         if is_agent:

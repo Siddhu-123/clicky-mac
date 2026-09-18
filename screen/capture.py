@@ -50,6 +50,9 @@ class ScreenShot:
     logical_width: int
     logical_height: int
 
+    # Native PIL image for zero-copy MLX processing
+    pil_image: Optional[Image.Image] = None
+
 
 def get_macos_dpi_scale() -> float:
     """Returns backing scale factor for main screen on macOS (default 2.0 on Retina)."""
@@ -118,6 +121,7 @@ def capture_all_screens(max_width: int = 1280) -> List[ScreenShot]:
                     logical_top=log_top,
                     logical_width=log_w,
                     logical_height=log_h,
+                    pil_image=downscaled_img,
                 )
             )
 
