@@ -14,26 +14,58 @@ from companion_manager import CompanionManager
 
 
 def check_macos_permissions():
-    """Prints guidance for necessary macOS system permissions."""
+    """Checks and reports live macOS permissions for Accessibility, Screen Recording, and Mic."""
     print("=" * 60)
-    print("🔵 Clicky for macOS Initializing...")
+    print("🔵 Clicky for macOS (Apple MLX Edition)")
     print("=" * 60)
-    print("Permissions check on macOS:")
-    print("1. Accessibility: Required for global Control+Option hotkey.")
-    print("   If prompted, enable in System Settings -> Privacy & Security -> Accessibility.")
-    print("2. Screen Recording: Required for screen awareness & visual pointing.")
-    print("   If prompted, enable in System Settings -> Privacy & Security -> Screen Recording.")
-    print("3. Microphone: Required for push-to-talk voice interaction.")
-    print("   If prompted, enable in System Settings -> Privacy & Security -> Microphone.")
+
+    # 1. Accessibility
+    try:
+        import ApplicationServices
+        trusted = ApplicationServices.AXIsProcessTrustedWithOptions({
+            ApplicationServices.kAXTrustedCheckOptionPrompt: True
+        })
+        status_acc = "✓ GRANTED (No popup needed)" if trusted else "⚠️ ACTION REQUIRED: Enable in System Settings -> Privacy -> Accessibility"
+    except Exception as e:
+        status_acc = f"Unknown ({e})"
+    print(f"1. Accessibility:     {status_acc}")
+
+    # 2. Screen Recording
+    try:
+        import Quartz
+        screen_ok = Quartz.CGPreflightScreenCaptureAccess()
+        if not screen_ok:
+            Quartz.CGRequestScreenCaptureAccess()
+        status_scr = "✓ GRANTED (No popup needed)" if screen_ok else "⚠️ ACTION REQUIRED: Enable in System Settings -> Privacy -> Screen Recording"
+    except Exception as e:
+        status_scr = f"Unknown ({e})"
+    print(f"2. Screen Recording:  {status_scr}")
+
+    # 3. Microphone
+    try:
+        import sounddevice as sd
+        dev = sd.query_devices(kind="input")
+        status_mic = f"✓ READY ({dev.get('name', 'Default Mic')})"
+    except Exception as e:
+        status_mic = f"⚠️ Check audio input ({e})"
+    print(f"3. Microphone:        {status_mic}")
     print("=" * 60)
 
 
 def main():
     check_macos_permissions()
 
+    # Configure macOS AppKit activation policy
+    try:
+        from AppKit import NSApp, NSApplicationActivationPolicyAccessory
+        NSApp.setActivationPolicy_(NSApplicationActivationPolicyAccessory)
+        NSApp.activateIgnoringOtherApps_(True)
+    except Exception:
+        pass
+
     # Create Qt Application
     app = QApplication(sys.argv)
-    app.setQuitOnLastWindowClosed(False)  # Keep running in menu bar
+    app.setQuitOnLastWindowClosed(False)
 
     # Initialize Clicky Companion
     manager = CompanionManager()

@@ -59,10 +59,11 @@ class MLXEngine(BaseAIProvider):
             if on_progress:
                 on_progress(f"Loading MLX model: {self.model_id}...")
 
-            print(f"[MLXEngine] Loading model onto Apple Metal GPU: {self.model_id}")
+            print(f"\n⏳ [MLXEngine] Loading model into Apple Unified Memory: {self.model_id}")
+            print("   (If this is your first run, Hugging Face will download ~1.5 GB of 4-bit weights)")
             self.model, self.processor = load(self.model_id)
             self.config = self.model.config
-            print(f"[MLXEngine] Model {self.model_id} loaded successfully onto Apple GPU.")
+            print(f"✓ [MLXEngine] Model {self.model_id} is loaded onto Apple Metal GPU and ready!\n")
 
     def _build_prompt_and_image(
         self,

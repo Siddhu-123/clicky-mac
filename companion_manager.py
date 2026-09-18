@@ -121,6 +121,8 @@ class CompanionManager(QObject):
     def start(self):
         self.overlay.show()
         self.panel.show()
+        self.panel.raise_()
+        self.panel.activateWindow()
         self.tray.show()
         self.hotkey_monitor.start()
         self.update_provider_ui()

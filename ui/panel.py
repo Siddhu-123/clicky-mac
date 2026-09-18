@@ -32,9 +32,9 @@ class CompanionPanel(QWidget):
         self.on_submit_text = on_submit_text
 
         self.setWindowFlags(
-            Qt.WindowType.FramelessWindowHint
+            Qt.WindowType.Window
+            | Qt.WindowType.FramelessWindowHint
             | Qt.WindowType.WindowStaysOnTopHint
-            | Qt.WindowType.SubWindow
         )
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground, True)
         self.resize(360, 310)
@@ -46,12 +46,11 @@ class CompanionPanel(QWidget):
         self._set_default_position()
 
     def _set_default_position(self):
-        screen = self.screen() or self.window().screen()
+        screen = QApplication.primaryScreen()
         if screen:
-            geom = screen.geometry()
-            # Bottom-right corner with 30px margin
-            x = geom.right() - self.width() - 30
-            y = geom.bottom() - self.height() - 50
+            geom = screen.availableGeometry()
+            x = geom.right() - self.width() - 40
+            y = geom.bottom() - self.height() - 40
             self.move(x, y)
 
     def _build_ui(self):
