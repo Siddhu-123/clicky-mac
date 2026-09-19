@@ -103,6 +103,21 @@ AGENT_RE = re.compile(
     re.IGNORECASE,
 )
 
+OPEN_APP_RE = re.compile(
+    r"^\s*(?:can\s+you\s+|please\s+)?(?:open|launch|start|run|switch\s+to)\s+([a-zA-Z0-9\s._-]+?)[\s.!?]*$",
+    re.IGNORECASE,
+)
+
+
+def parse_open_app(q: str) -> Optional[str]:
+    """Returns application name if user is asking to open/launch an application."""
+    m = OPEN_APP_RE.match(q.strip() if q else "")
+    if m:
+        target = m.group(1).strip()
+        if target.lower() not in ("this", "it", "that", "the app", "an app", "settings"):
+            return target
+    return None
+
 
 def is_locate(q: str) -> bool:
     return LOCATE_RE.search(q or "") is not None
@@ -126,7 +141,7 @@ def is_repeat(q: str) -> bool:
 
 def is_agent(q: str) -> bool:
     """Detects if user is invoking HeyClicky Max Agent Mode."""
-    return AGENT_RE.search(q or "") is not None
+    return AGENT_RE.search(q or "") is not None or parse_open_app(q) is not None
 
 
 def is_sensitive_window(title: str) -> bool:

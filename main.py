@@ -81,9 +81,38 @@ def main():
     app = QApplication(sys.argv)
     app.setQuitOnLastWindowClosed(False)
 
+    from PyQt6.QtNetwork import QLocalServer, QLocalSocket
+    server_name = "clicky_single_instance_lock"
+    test_sock = QLocalSocket()
+    test_sock.connectToServer(server_name)
+    if test_sock.waitForConnected(300):
+        print("[Clicky] Clicky is already running. Bringing existing window to front...")
+        test_sock.write(b"SHOW\n")
+        test_sock.waitForBytesWritten(300)
+        test_sock.disconnectFromServer()
+        sys.exit(0)
+
+    QLocalServer.removeServer(server_name)
+    server = QLocalServer()
+    server.listen(server_name)
+
     # Initialize Clicky Companion
     manager = CompanionManager()
     manager.start()
+
+    def _on_single_instance_signal():
+        conn = server.nextPendingConnection()
+        if conn:
+            conn.waitForReadyRead(300)
+            data = bytes(conn.readAll()).decode().strip()
+            if data == "SHOW":
+                manager.panel._set_default_position()
+                manager.panel.show()
+                manager.panel.raise_()
+                manager.panel.activateWindow()
+            conn.disconnectFromServer()
+
+    server.newConnection.connect(_on_single_instance_signal)
 
     sys.exit(app.exec())
 

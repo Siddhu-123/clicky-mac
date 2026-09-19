@@ -27,7 +27,8 @@ from audio.tts.macos_tts_provider import MacOSTTSProvider
 from config import cfg, cfg_manager
 from hotkey import GlobalHotkeyMonitor
 from screen.capture import ScreenShot, capture_all_screens
-from tutor import active_window_title, app_key, is_agent, is_locate, is_repeat, is_stop
+import subprocess
+from tutor import active_window_title, app_key, is_agent, is_locate, is_repeat, is_stop, parse_open_app
 from ui.overlay import OverlayWindow
 from ui.panel import CompanionPanel
 from ui.settings_dialog import SettingsDialog
@@ -207,6 +208,26 @@ class CompanionManager(QObject):
             await self._speak_response(self.last_answer)
             return
 
+        # Check for direct app launch command (e.g. "Open Google Chrome")
+        app_target = parse_open_app(query)
+        if app_target:
+            self.status_changed.emit(f"Opening {app_target}...", "agent")
+            try:
+                res = subprocess.run(["open", "-a", app_target], capture_output=True, text=True)
+                if res.returncode == 0:
+                    reply = f"Opening {app_target} for you."
+                else:
+                    reply = f"Opening {app_target}..."
+                    subprocess.run(["open", "-g", f"/Applications/{app_target}.app"])
+            except Exception as e:
+                reply = f"Could not launch {app_target}: {e}"
+
+            self.last_answer = reply
+            self.answer_received.emit(reply)
+            self.status_changed.emit("Ready", "normal")
+            await self._speak_response(reply)
+            return
+
         is_agent_query = self.is_agent_mode or is_agent(query)
         if is_agent_query:
             await self._run_agent_pipeline(query)
@@ -234,14 +255,15 @@ class CompanionManager(QObject):
         # Update history
         history.append({"role": "user", "content": query})
         history.append({"role": "assistant", "content": response})
-        self.last_answer = response
 
-        # Parse and show visual tags
-        self._parse_and_dispatch_tags(response)
+        # Parse and show visual tags, and get human-readable clean text for HUD
+        display_text = self._parse_and_dispatch_tags(response)
+        self.last_answer = display_text
 
         # Update HUD & Speak
-        self.answer_received.emit(response)
-        await self._speak_response(response)
+        self.status_changed.emit("Ready", "normal")
+        self.answer_received.emit(display_text)
+        await self._speak_response(display_text)
 
     async def _run_agent_pipeline(self, objective: str):
         self.status_changed.emit("Agent Working...", "agent")
@@ -253,31 +275,43 @@ class CompanionManager(QObject):
         final_answer = await runtime.run(objective)
 
         self.last_answer = final_answer
+        self.status_changed.emit("Ready", "normal")
         self.answer_received.emit(final_answer)
         await self._speak_response(final_answer)
 
-    def _parse_and_dispatch_tags(self, text: str):
-        # [POINT:x,y:label]
-        point_matches = re.finditer(r"\[POINT:(\d+),(\d+)(?::([^\]]*))?\]", text)
+    def _parse_and_dispatch_tags(self, text: str) -> str:
+        # Flexible [POINT:x, y, "label"] or [POINT:x,y:label]
+        first_label = ""
+        point_matches = list(re.finditer(r"\[POINT:\s*(\d+)\s*,\s*(\d+)\s*(?:[:,]\s*[\"']?([^\"'\]]*)[\"']?)?\s*\]", text))
         for m in point_matches:
             x = float(m.group(1))
             y = float(m.group(2))
-            label = m.group(3) or ""
+            label = (m.group(3) or "").strip().strip("\"'")
+            if not first_label and label:
+                first_label = label
             self.point_requested.emit(x, y, label)
 
         # [ARROW:x1,y1->x2,y2]
-        arrow_matches = re.finditer(r"\[ARROW:(\d+),(\d+)->(\d+),(\d+)\]", text)
+        arrow_matches = re.finditer(r"\[ARROW:\s*(\d+)\s*,\s*(\d+)\s*->\s*(\d+)\s*,\s*(\d+)\s*\]", text)
         for m in arrow_matches:
             self.annotation_requested.emit("arrow", [
                 float(m.group(1)), float(m.group(2)), float(m.group(3)), float(m.group(4))
             ])
 
         # [CIRCLE:x,y,r:label]
-        circle_matches = re.finditer(r"\[CIRCLE:(\d+),(\d+),(\d+)(?::([^\]]*))?\]", text)
+        circle_matches = re.finditer(r"\[CIRCLE:\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)\s*(?:[:,]\s*[\"']?([^\"'\]]*)[\"']?)?\s*\]", text)
         for m in circle_matches:
             self.annotation_requested.emit("circle", [
-                float(m.group(1)), float(m.group(2)), float(m.group(3)), m.group(4) or ""
+                float(m.group(1)), float(m.group(2)), float(m.group(3)), (m.group(4) or "").strip().strip("\"'")
             ])
+
+        # Clean tags from text for human display in HUD
+        clean_text = re.sub(r"\[(POINT|ARROW|CIRCLE|LABEL|UNDERLINE):[^\]]*\]", "", text).strip()
+        if not clean_text and first_label:
+            clean_text = f"Pointing to {first_label} on your screen."
+        elif not clean_text:
+            clean_text = "Here it is on your screen."
+        return clean_text
 
         # [LABEL:x,y:text]
         label_matches = re.finditer(r"\[LABEL:(\d+),(\d+):([^\]]*)\]", text)
