@@ -31,13 +31,13 @@ def check_macos_permissions():
         pass
     print("-" * 60)
 
-    # 1. Accessibility
+    # 1. Accessibility (quiet check without forcing Terminal prompt)
     try:
         import ApplicationServices
         trusted = ApplicationServices.AXIsProcessTrustedWithOptions({
-            ApplicationServices.kAXTrustedCheckOptionPrompt: True
+            ApplicationServices.kAXTrustedCheckOptionPrompt: False
         })
-        status_acc = "✓ GRANTED (No popup needed)" if trusted else "⚠️ ACTION REQUIRED: Enable in System Settings -> Privacy -> Accessibility"
+        status_acc = "✓ GRANTED" if trusted else "⚠️ Optional (for global hotkey Ctrl+Option): Enable Clicky in System Settings -> Accessibility"
     except Exception as e:
         status_acc = f"Unknown ({e})"
     print(f"1. Accessibility:     {status_acc}")
@@ -46,9 +46,7 @@ def check_macos_permissions():
     try:
         import Quartz
         screen_ok = Quartz.CGPreflightScreenCaptureAccess()
-        if not screen_ok:
-            Quartz.CGRequestScreenCaptureAccess()
-        status_scr = "✓ GRANTED (No popup needed)" if screen_ok else "⚠️ ACTION REQUIRED: Enable in System Settings -> Privacy -> Screen Recording"
+        status_scr = "✓ GRANTED" if screen_ok else "⚠️ ACTION REQUIRED: Enable Clicky in System Settings -> Privacy -> Screen Recording"
     except Exception as e:
         status_scr = f"Unknown ({e})"
     print(f"2. Screen Recording:  {status_scr}")

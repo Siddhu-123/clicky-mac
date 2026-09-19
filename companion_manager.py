@@ -120,7 +120,6 @@ class CompanionManager(QObject):
         self._loop.run_forever()
 
     def start(self):
-        self.overlay.show()
         self.panel.show()
         self.panel.raise_()
         self.panel.activateWindow()

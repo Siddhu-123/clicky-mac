@@ -11,7 +11,7 @@ import time
 from dataclasses import dataclass, field
 from typing import List, Optional, Tuple
 
-from PyQt6.QtCore import QPointF, QRectF, Qt, QTimer
+from PyQt6.QtCore import QPoint, QPointF, QRectF, Qt, QTimer
 from PyQt6.QtGui import QBrush, QColor, QCursor, QFont, QPainter, QPainterPath, QPen
 from PyQt6.QtWidgets import QApplication, QWidget
 
@@ -73,70 +73,94 @@ class OverlayWindow(QWidget):
         # Whiteboard annotations
         self.annotations: List[WhiteboardAnnotation] = []
 
-        # 60 FPS animation timer
+        # 60 FPS animation timer (only runs when actively animating)
         self.timer = QTimer(self)
         self.timer.timeout.connect(self._on_tick)
-        self.timer.start(16)
 
     def _update_geometry(self):
-        screens = QApplication.screens()
-        if not screens:
-            return
-        left = min(s.geometry().left() for s in screens)
-        top = min(s.geometry().top() for s in screens)
-        right = max(s.geometry().right() for s in screens)
-        bottom = max(s.geometry().bottom() for s in screens)
-        self.setGeometry(left, top, right - left, bottom - top)
+        screen = QApplication.primaryScreen()
+        if screen:
+            self.setGeometry(screen.geometry())
+
+    def _update_geometry_for_point(self, point: QPoint):
+        screen = QApplication.screenAt(point) or QApplication.primaryScreen()
+        if screen:
+            self.setGeometry(screen.geometry())
 
     def point_at(self, target_x: float, target_y: float, label: str = "", dwell_ms: int = 3500):
         """Initiates bezier arc flight to target logical point."""
-        self._update_geometry()
-        cursor_pos = QCursor.pos()
-        start_x = cursor_pos.x() + self.resting_offset_x
-        start_y = cursor_pos.y() + self.resting_offset_y
+        target_pt = QPoint(int(target_x), int(target_y))
+        self._update_geometry_for_point(target_pt)
 
-        self.start_p = QPointF(start_x, start_y)
-        self.target_p = QPointF(target_x, target_y)
+        cursor_global = QCursor.pos()
+        start_local = self.mapFromGlobal(cursor_global)
+        target_local = self.mapFromGlobal(target_pt)
+
+        self.start_p = QPointF(start_local.x(), start_local.y())
+        self.target_p = QPointF(target_local.x(), target_local.y())
         self.target_label = label
         self.dwell_duration = dwell_ms / 1000.0
 
-        # Compute cubic control point for an arched flight path (teacher pace)
-        mid_x = (start_x + target_x) / 2.0
-        mid_y = (start_y + target_y) / 2.0
-        dx = target_x - start_x
-        dy = target_y - start_y
+        # Compute cubic control point for an arched flight path
+        mid_x = (start_local.x() + target_local.x()) / 2.0
+        mid_y = (start_local.y() + target_local.y()) / 2.0
+        dx = target_local.x() - start_local.x()
+        dy = target_local.y() - start_local.y()
         dist = math.hypot(dx, dy)
-        # Arch height proportional to distance
         arch = min(dist * 0.25, 120.0)
         self.ctrl_p = QPointF(mid_x, mid_y - arch)
+
+        self.buddy_x = self.start_p.x()
+        self.buddy_y = self.start_p.y()
 
         self.anim_duration = max(0.4, min(1.2, dist / 800.0)) / cfg.cursor_speed
         self.anim_start_time = time.time()
         self.anim_state = "flying_to_target"
+
+        if not self.timer.isActive():
+            self.timer.start(16)
         self.show()
 
     def add_arrow(self, x1: float, y1: float, x2: float, y2: float, duration: float = 4.0):
+        self._update_geometry_for_point(QPoint(int(x1), int(y1)))
+        p1 = self.mapFromGlobal(QPoint(int(x1), int(y1)))
+        p2 = self.mapFromGlobal(QPoint(int(x2), int(y2)))
         self.annotations.append(WhiteboardAnnotation(
-            kind="arrow", created_at=time.time(), x1=x1, y1=y1, x2=x2, y2=y2, duration=duration
+            kind="arrow", created_at=time.time(), x1=p1.x(), y1=p1.y(), x2=p2.x(), y2=p2.y(), duration=duration
         ))
+        if not self.timer.isActive():
+            self.timer.start(16)
+        self.show()
 
     def add_circle(self, x: float, y: float, radius: float = 30.0, text: str = "", duration: float = 4.0):
+        self._update_geometry_for_point(QPoint(int(x), int(y)))
+        p = self.mapFromGlobal(QPoint(int(x), int(y)))
         self.annotations.append(WhiteboardAnnotation(
-            kind="circle", created_at=time.time(), x1=x, y1=y, radius=radius, text=text, duration=duration
+            kind="circle", created_at=time.time(), x1=p.x(), y1=p.y(), radius=radius, text=text, duration=duration
         ))
+        if not self.timer.isActive():
+            self.timer.start(16)
+        self.show()
 
     def add_label(self, x: float, y: float, text: str, duration: float = 4.0):
+        self._update_geometry_for_point(QPoint(int(x), int(y)))
+        p = self.mapFromGlobal(QPoint(int(x), int(y)))
         self.annotations.append(WhiteboardAnnotation(
-            kind="label", created_at=time.time(), x1=x, y1=y, text=text, duration=duration
+            kind="label", created_at=time.time(), x1=p.x(), y1=p.y(), text=text, duration=duration
         ))
+        if not self.timer.isActive():
+            self.timer.start(16)
+        self.show()
 
     def clear_annotations(self):
         self.annotations.clear()
+        if self.anim_state == "idle":
+            self.timer.stop()
+            self.hide()
         self.update()
 
     def _bezier_point(self, p0: QPointF, p1: QPointF, p2: QPointF, t: float) -> QPointF:
         """Quadratic bezier interpolation with smooth ease-in-out."""
-        # Smooth step ease
         ease_t = t * t * (3 - 2 * t)
         u = 1 - ease_t
         x = u * u * p0.x() + 2 * u * ease_t * p1.x() + ease_t * ease_t * p2.x()
@@ -145,15 +169,8 @@ class OverlayWindow(QWidget):
 
     def _on_tick(self):
         now = time.time()
-        cursor_pos = QCursor.pos()
-        home_pos = QPointF(cursor_pos.x() + self.resting_offset_x, cursor_pos.y() + self.resting_offset_y)
 
-        if self.anim_state == "idle":
-            # Smoothly follow user's cursor
-            self.buddy_x += (home_pos.x() - self.buddy_x) * 0.25
-            self.buddy_y += (home_pos.y() - self.buddy_y) * 0.25
-
-        elif self.anim_state == "flying_to_target":
+        if self.anim_state == "flying_to_target":
             elapsed = now - self.anim_start_time
             t = min(1.0, elapsed / self.anim_duration)
             pt = self._bezier_point(self.start_p, self.ctrl_p, self.target_p, t)
@@ -166,30 +183,21 @@ class OverlayWindow(QWidget):
         elif self.anim_state == "dwelling":
             self.buddy_x, self.buddy_y = self.target_p.x(), self.target_p.y()
             if now >= self.dwell_until:
-                # Fly back home
-                self.start_p = QPointF(self.buddy_x, self.buddy_y)
-                self.target_p = home_pos
-                self.ctrl_p = QPointF(
-                    (self.start_p.x() + self.target_p.x()) / 2,
-                    (self.start_p.y() + self.target_p.y()) / 2 - 50,
-                )
-                self.anim_start_time = now
-                self.anim_duration = 0.5 / cfg.cursor_speed
-                self.anim_state = "flying_home"
-
-        elif self.anim_state == "flying_home":
-            elapsed = now - self.anim_start_time
-            t = min(1.0, elapsed / self.anim_duration)
-            # Re-target home_pos so it moves toward moving cursor
-            pt = self._bezier_point(self.start_p, self.ctrl_p, home_pos, t)
-            self.buddy_x, self.buddy_y = pt.x(), pt.y()
-
-            if t >= 1.0:
+                # Dwell complete, transition to idle
                 self.anim_state = "idle"
                 self.target_label = ""
+                if not self.annotations:
+                    self.timer.stop()
+                    self.hide()
+                    return
 
         # Prune expired annotations
         self.annotations = [a for a in self.annotations if now - a.created_at < a.duration]
+
+        if self.anim_state == "idle" and not self.annotations:
+            self.timer.stop()
+            self.hide()
+            return
 
         self.update()
 
@@ -266,38 +274,39 @@ class OverlayWindow(QWidget):
                     self.target_label,
                 )
 
-        # ── Draw Clicky Blue Buddy Triangle ──
-        bx = self.buddy_x
-        by = self.buddy_y
+        # ── Draw Clicky Blue Buddy Triangle (Only during active pointing flight) ──
+        if self.anim_state != "idle":
+            bx = self.buddy_x
+            by = self.buddy_y
 
-        painter.save()
-        painter.translate(bx, by)
+            painter.save()
+            painter.translate(bx, by)
 
-        # Soft drop shadow
-        shadow_path = QPainterPath()
-        shadow_path.moveTo(2, 2)
-        shadow_path.lineTo(18, 16)
-        shadow_path.lineTo(6, 20)
-        shadow_path.closeSubpath()
-        painter.setPen(Qt.PenStyle.NoPen)
-        painter.setBrush(QBrush(QColor(0, 0, 0, 70)))
-        painter.drawPath(shadow_path)
+            # Soft drop shadow
+            shadow_path = QPainterPath()
+            shadow_path.moveTo(2, 2)
+            shadow_path.lineTo(18, 16)
+            shadow_path.lineTo(6, 20)
+            shadow_path.closeSubpath()
+            painter.setPen(Qt.PenStyle.NoPen)
+            painter.setBrush(QBrush(QColor(0, 0, 0, 70)))
+            painter.drawPath(shadow_path)
 
-        # Vibrant Clicky Blue Arrow / Triangle
-        buddy_path = QPainterPath()
-        buddy_path.moveTo(0, 0)
-        buddy_path.lineTo(16, 14)
-        buddy_path.lineTo(4, 18)
-        buddy_path.closeSubpath()
+            # Vibrant Clicky Blue Arrow / Triangle
+            buddy_path = QPainterPath()
+            buddy_path.moveTo(0, 0)
+            buddy_path.lineTo(16, 14)
+            buddy_path.lineTo(4, 18)
+            buddy_path.closeSubpath()
 
-        # Primary blue fill + white border
-        painter.setPen(QPen(QColor(255, 255, 255, 230), 1.5))
-        painter.setBrush(QBrush(QColor(37, 99, 235)))  # Royal blue
-        painter.drawPath(buddy_path)
+            # Primary blue fill + white border
+            painter.setPen(QPen(QColor(255, 255, 255, 230), 1.5))
+            painter.setBrush(QBrush(QColor(37, 99, 235)))  # Royal blue
+            painter.drawPath(buddy_path)
 
-        # Small cyan inner highlight dot
-        painter.setPen(Qt.PenStyle.NoPen)
-        painter.setBrush(QBrush(QColor(96, 165, 250)))
-        painter.drawEllipse(QPointF(6, 10), 2.5, 2.5)
+            # Small cyan inner highlight dot
+            painter.setPen(Qt.PenStyle.NoPen)
+            painter.setBrush(QBrush(QColor(96, 165, 250)))
+            painter.drawEllipse(QPointF(6, 10), 2.5, 2.5)
 
-        painter.restore()
+            painter.restore()
