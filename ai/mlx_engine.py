@@ -144,7 +144,10 @@ class MLXEngine(BaseAIProvider):
             )
 
             # Keep Unified Memory cache tidy
-            mx.metal.clear_cache()
+            if hasattr(mx, "clear_cache"):
+                mx.clear_cache()
+            else:
+                mx.metal.clear_cache()
             return res.text.strip()
 
         return await asyncio.to_thread(_run_inference)
@@ -198,4 +201,7 @@ class MLXEngine(BaseAIProvider):
             if text_piece:
                 yield text_piece
 
-        mx.metal.clear_cache()
+        if hasattr(mx, "clear_cache"):
+            mx.clear_cache()
+        else:
+            mx.metal.clear_cache()

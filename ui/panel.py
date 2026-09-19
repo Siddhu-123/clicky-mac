@@ -6,7 +6,7 @@ Shows status, user query transcript, live streaming answers, and model badge.
 from __future__ import annotations
 
 from PyQt6.QtCore import QPoint, Qt
-from PyQt6.QtGui import QColor, QFont
+from PyQt6.QtGui import QColor, QCursor, QFont
 from PyQt6.QtWidgets import (
     QApplication,
     QFrame,
@@ -26,11 +26,13 @@ from config import cfg
 class CompanionPanel(QWidget):
     """Floating HUD companion panel matching macOS dark design."""
 
-    def __init__(self, on_toggle_mode=None, on_open_settings=None, on_submit_text=None):
+    def __init__(self, on_toggle_mode=None, on_open_settings=None, on_submit_text=None, on_toggle_voice=None):
         super().__init__()
         self.on_toggle_mode = on_toggle_mode
         self.on_open_settings = on_open_settings
         self.on_submit_text = on_submit_text
+        self.on_toggle_voice = on_toggle_voice
+        self._is_recording_ui = False
 
         self.setWindowFlags(
             Qt.WindowType.Window
@@ -47,7 +49,7 @@ class CompanionPanel(QWidget):
         self._set_default_position()
 
     def _set_default_position(self):
-        screen = QApplication.primaryScreen()
+        screen = QApplication.screenAt(QCursor.pos()) or QApplication.primaryScreen()
         if screen:
             geom = screen.availableGeometry()
             x = geom.right() - self.width() - 40
@@ -192,6 +194,15 @@ class CompanionPanel(QWidget):
         self.input_field.returnPressed.connect(self._on_enter_pressed)
         input_layout.addWidget(self.input_field, 1)
 
+        # Mic voice button
+        self.mic_btn = QPushButton("🎙️", self.card)
+        self.mic_btn.setFixedSize(28, 28)
+        self.mic_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.mic_btn.setToolTip("Click to speak (or hold Ctrl+Option)")
+        self._update_mic_style(False)
+        self.mic_btn.clicked.connect(self._on_mic_clicked)
+        input_layout.addWidget(self.mic_btn)
+
         send_btn = QPushButton("↑", self.card)
         send_btn.setFixedSize(28, 28)
         send_btn.setStyleSheet("""
@@ -220,6 +231,36 @@ class CompanionPanel(QWidget):
 
         root_layout.addWidget(self.card)
 
+    def _update_mic_style(self, is_recording: bool):
+        if is_recording:
+            self.mic_btn.setStyleSheet("""
+                QPushButton {
+                    background-color: #EF4444;
+                    color: white;
+                    border: 2px solid #FCA5A5;
+                    border-radius: 14px;
+                    font-size: 13px;
+                }
+            """)
+        else:
+            self.mic_btn.setStyleSheet("""
+                QPushButton {
+                    background-color: rgba(255, 255, 255, 0.1);
+                    color: white;
+                    border: 1px solid rgba(255, 255, 255, 0.2);
+                    border-radius: 14px;
+                    font-size: 13px;
+                }
+                QPushButton:hover {
+                    background-color: rgba(255, 255, 255, 0.2);
+                    border: 1px solid #38BDF8;
+                }
+            """)
+
+    def _on_mic_clicked(self):
+        if hasattr(self, "on_toggle_voice") and self.on_toggle_voice:
+            self.on_toggle_voice()
+
     def _on_enter_pressed(self):
         text = self.input_field.text().strip()
         if text and hasattr(self, "on_submit_text") and self.on_submit_text:
@@ -228,6 +269,7 @@ class CompanionPanel(QWidget):
 
     def set_status(self, text: str, state: str = "normal"):
         self.status_pill.setText(text)
+        self._update_mic_style(state == "listening")
         color_map = {
             "listening": ("rgba(34, 197, 94, 0.2)", "#4ADE80", "rgba(34, 197, 94, 0.4)"),
             "thinking": ("rgba(59, 130, 246, 0.2)", "#60A5FA", "rgba(59, 130, 246, 0.4)"),

@@ -74,12 +74,13 @@ class CompanionManager(QObject):
         # Pure Apple MLX Engine
         self.mlx_engine = MLXEngine()
 
-        # UI Components
+        self._is_recording = False
         self.overlay = OverlayWindow()
         self.panel = CompanionPanel(
             on_toggle_mode=self.toggle_mode,
             on_open_settings=self.open_settings,
             on_submit_text=self.on_text_query,
+            on_toggle_voice=self.toggle_voice_recording,
         )
         self.tray = ClickyTrayIcon(
             on_toggle_panel=self.toggle_panel,
@@ -130,9 +131,12 @@ class CompanionManager(QObject):
 
         # Warm up MLX model in background so first query has zero lag
         def _warmup():
-            self.status_changed.emit("Loading MLX Model...", "thinking")
-            self.mlx_engine.ensure_model_loaded()
-            self.status_changed.emit("Ready", "normal")
+            try:
+                self.status_changed.emit("Loading MLX Model...", "thinking")
+                self.mlx_engine.ensure_model_loaded()
+                self.status_changed.emit("Ready", "normal")
+            except Exception:
+                pass
 
         threading.Thread(target=_warmup, daemon=True).start()
 
@@ -145,12 +149,22 @@ class CompanionManager(QObject):
 
     # ── Push-to-Talk Lifecycle ──
 
+    def toggle_voice_recording(self):
+        if not self._is_recording:
+            self._is_recording = True
+            self.on_hotkey_down()
+        else:
+            self._is_recording = False
+            self.on_hotkey_up()
+
     def on_hotkey_down(self):
+        self._is_recording = True
         self.player.stop()
         self.status_changed.emit("Listening...", "listening")
         self.recorder.start_recording()
 
     def on_hotkey_up(self):
+        self._is_recording = False
         audio_data = self.recorder.stop_recording()
         if audio_data is None or len(audio_data) < 16000 * 0.3:
             self.status_changed.emit("Ready", "normal")
@@ -169,6 +183,7 @@ class CompanionManager(QObject):
         asyncio.run_coroutine_threadsafe(self._process_query_turn(query), self._loop)
 
     def on_cancel(self):
+        self._is_recording = False
         self.player.stop()
         self.overlay.clear_annotations()
         self.status_changed.emit("Ready", "normal")
@@ -311,7 +326,10 @@ class CompanionManager(QObject):
         if self.panel.isVisible():
             self.panel.hide()
         else:
+            self.panel._set_default_position()
             self.panel.show()
+            self.panel.raise_()
+            self.panel.activateWindow()
 
     def open_settings(self):
         dlg = SettingsDialog(on_saved=self._on_settings_saved)

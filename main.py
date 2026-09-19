@@ -73,8 +73,8 @@ def main():
 
     # Configure macOS AppKit activation policy
     try:
-        from AppKit import NSApp, NSApplicationActivationPolicyAccessory
-        NSApp.setActivationPolicy_(NSApplicationActivationPolicyAccessory)
+        from AppKit import NSApp, NSApplicationActivationPolicyRegular
+        NSApp.setActivationPolicy_(NSApplicationActivationPolicyRegular)
         NSApp.activateIgnoringOtherApps_(True)
     except Exception:
         pass
