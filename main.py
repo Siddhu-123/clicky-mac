@@ -17,7 +17,19 @@ def check_macos_permissions():
     """Checks and reports live macOS permissions for Accessibility, Screen Recording, and Mic."""
     print("=" * 60)
     print("🔵 Clicky for macOS (Apple MLX Edition)")
-    print("=" * 60)
+    try:
+        from Foundation import NSBundle
+        bundle = NSBundle.mainBundle()
+        bid = bundle.bundleIdentifier() or "Raw Python binary"
+        bundle_path = bundle.bundlePath()
+        if bundle_path.endswith(".app"):
+            print(f"📦 App Bundle:        {bundle_path}")
+            print(f"🆔 TCC Identity:      {bid} (Scoped to Clicky)")
+        else:
+            print(f"🆔 TCC Identity:      {bid}")
+    except Exception:
+        pass
+    print("-" * 60)
 
     # 1. Accessibility
     try:
@@ -54,6 +66,10 @@ def check_macos_permissions():
 
 def main():
     check_macos_permissions()
+
+    if "--check-permissions" in sys.argv or "--test-startup" in sys.argv:
+        print("✓ Clicky startup check completed.")
+        return
 
     # Configure macOS AppKit activation policy
     try:

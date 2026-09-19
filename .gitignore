@@ -27,3 +27,9 @@ clicky_tts_*
 # IDEs
 .vscode/
 .idea/
+
+# Distribution builds
+dist/
+build/
+*.egg-info/
+
