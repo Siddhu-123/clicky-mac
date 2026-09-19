@@ -14,6 +14,9 @@ from agent.tools import AgentTools
 from ai.base_provider import BaseAIProvider
 from config import cfg
 
+# Matches key="value" | key='value' | key=plain
+_ARG_RE = re.compile(r'([a-zA-Z0-9_]+)\s*=\s*(?:"([^"]*)"|\'([^\']*)\'|([^,)]*))')
+
 AGENT_SYSTEM_PROMPT = """You are HeyClicky Agent, an autonomous macOS assistant.
 You can execute tasks by thinking step-by-step and invoking available tools.
 
@@ -51,19 +54,46 @@ class AgentRuntime:
         self.max_steps = 10
 
     def _parse_action(self, text: str) -> Optional[tuple[str, dict]]:
-        """Parses `Action: tool_name(key="value", ...)` from LLM output."""
-        match = re.search(r"Action:\s*([a-zA-Z0-9_]+)\((.*)\)", text, re.DOTALL)
+        """Parses `Action: tool_name(key="value", ...)` from LLM output.
+
+        Uses a quote-aware, bracket-balanced scan so arguments containing
+        parentheses or quotes are not truncated.
+        """
+        match = re.search(r"Action:\s*([a-zA-Z0-9_]+)\s*\(", text)
         if not match:
             return None
 
-        tool_name = match.group(1).strip()
-        raw_args = match.group(2).strip()
+        tool_name = match.group(1)
+        raw_args = []
 
-        # Parse keyword arguments
-        # e.g. command="ls -la", file_path="test.txt"
+        # Find the matching closing paren, respecting nested parens and quotes.
+        i = match.end()  # position right after the opening '('
+        depth = 1
+        in_str: Optional[str] = None
+        escape = False
+        n = len(text)
+        while i < n and depth > 0:
+            ch = text[i]
+            if in_str:
+                if escape:
+                    escape = False
+                elif ch == "\\":
+                    escape = True
+                elif ch == in_str:
+                    in_str = None
+            else:
+                if ch in ("'", '"'):
+                    in_str = ch
+                elif ch == "(":
+                    depth += 1
+                elif ch == ")":
+                    depth -= 1
+            if depth > 0:
+                raw_args.append(ch)
+            i += 1
+
         kwargs = {}
-        arg_pattern = re.compile(r'([a-zA-Z0-9_]+)\s*=\s*(?:"([^"]*)"|\'([^\']*)\'|([^,)]*))')
-        for m in arg_pattern.finditer(raw_args):
+        for m in _ARG_RE.finditer("".join(raw_args)):
             k = m.group(1)
             v = m.group(2) if m.group(2) is not None else (m.group(3) if m.group(3) is not None else m.group(4))
             kwargs[k] = v.strip() if isinstance(v, str) else v
@@ -141,7 +171,7 @@ class AgentRuntime:
 
             # Record in history
             history.append({"role": "user", "content": current_prompt})
-            history.append({"role": "model", "content": response})
+            history.append({"role": "assistant", "content": response})
 
             current_prompt = f"Observation:\n{obs}\n\nWhat is your next Thought and Action or Final Answer?"
 

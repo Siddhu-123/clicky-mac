@@ -43,8 +43,8 @@ Screen Context:
 
 Guidelines:
 1. When asked where an element, button, or menu is:
-   - Identify its coordinates on screen.
-   - Include a tag: [POINT:x,y:label] where x and y are in logical screen coordinates.
+   - Identify its coordinates as seen in the provided screenshot image.
+   - Include a tag: [POINT:x,y:label] where x and y are coordinates in the screenshot image.
    - Speak in 1-2 concise, friendly sentences.
 2. You can also draw visual whiteboard annotations:
    - [ARROW:x1,y1->x2,y2]
@@ -52,6 +52,24 @@ Guidelines:
    - [LABEL:x,y:text]
 3. Explain directly and clearly without fluff.
 """
+
+# Model-compatible annotation tag patterns.
+# The vision model reports coordinates in the (downscaled) screenshot image space;
+# CompanionManager scales them into macOS logical points before dispatching to the overlay.
+_NUM = r"\d+(?:\.\d+)?"
+_POINT_RE = re.compile(
+    rf"\[POINT:\s*({_NUM})\s*,\s*({_NUM})\s*(?:[:,]\s*[\"']?([^\"'\]]*)[\"']?)?\s*\]"
+)
+_ARROW_RE = re.compile(
+    rf"\[ARROW:\s*({_NUM})\s*,\s*({_NUM})\s*->\s*({_NUM})\s*,\s*({_NUM})\s*\]"
+)
+_CIRCLE_RE = re.compile(
+    rf"\[CIRCLE:\s*({_NUM})\s*,\s*({_NUM})\s*,\s*({_NUM})\s*(?:[:,]\s*[\"']?([^\"'\]]*)[\"']?)?\s*\]"
+)
+_LABEL_RE = re.compile(
+    rf"\[LABEL:\s*({_NUM})\s*,\s*({_NUM})\s*(?:[:,]\s*[\"']?([^\"'\]]*)[\"']?)?\s*\]"
+)
+_TAG_RE = re.compile(r"\[(?:POINT|ARROW|CIRCLE|LABEL|TYPE|UNDERLINE):[^\]]*\]")
 
 
 class CompanionManager(QObject):
@@ -97,10 +115,14 @@ class CompanionManager(QObject):
 
         # Connect signals
         self.status_changed.connect(self.panel.set_status)
+        self.status_changed.connect(lambda text, state: self.tray.update_status(text))
         self.query_received.connect(self.panel.set_user_query)
         self.answer_received.connect(self.panel.set_answer)
         self.point_requested.connect(self.overlay.point_at)
         self.annotation_requested.connect(self._handle_annotation)
+
+        # Last screenshot the model saw (used to map model coords -> logical points)
+        self._last_view_screenshot: Optional[ScreenShot] = None
 
         # Hotkey monitor
         self.hotkey_monitor = GlobalHotkeyMonitor(
@@ -237,6 +259,7 @@ class CompanionManager(QObject):
     async def _run_talk_pipeline(self, query: str):
         window_title = active_window_title()
         screenshots = capture_all_screens(max_width=cfg.max_screenshot_width)
+        self._last_view_screenshot = screenshots[0] if screenshots else None
 
         k = app_key(window_title)
         history = self.app_histories.setdefault(k, [])[-6:]
@@ -279,46 +302,63 @@ class CompanionManager(QObject):
         self.answer_received.emit(final_answer)
         await self._speak_response(final_answer)
 
+    def _map_model_coords(self, x: float, y: float):
+        """Scales model-reported (screenshot image) coordinates into macOS logical points."""
+        sc = self._last_view_screenshot
+        if sc is None or sc.width <= 0 or sc.height <= 0:
+            return float(x), float(y)
+        sx = sc.logical_left + x * (sc.logical_width / sc.width)
+        sy = sc.logical_top + y * (sc.logical_height / sc.height)
+        return float(sx), float(sy)
+
+    def _map_model_scale(self, value: float) -> float:
+        """Scales a length (e.g. circle radius) from image space to logical points."""
+        sc = self._last_view_screenshot
+        if sc is None or sc.width <= 0 or sc.height <= 0:
+            return float(value)
+        sx = sc.logical_width / sc.width
+        sy = sc.logical_height / sc.height
+        return float(value * (sx + sy) / 2.0)
+
     def _parse_and_dispatch_tags(self, text: str) -> str:
-        # Flexible [POINT:x, y, "label"] or [POINT:x,y:label]
         first_label = ""
-        point_matches = list(re.finditer(r"\[POINT:\s*(\d+)\s*,\s*(\d+)\s*(?:[:,]\s*[\"']?([^\"'\]]*)[\"']?)?\s*\]", text))
-        for m in point_matches:
-            x = float(m.group(1))
-            y = float(m.group(2))
+
+        # [POINT:x,y:label] or [POINT:x, y, "label"]
+        for m in _POINT_RE.finditer(text):
+            x, y = self._map_model_coords(float(m.group(1)), float(m.group(2)))
             label = (m.group(3) or "").strip().strip("\"'")
             if not first_label and label:
                 first_label = label
             self.point_requested.emit(x, y, label)
 
         # [ARROW:x1,y1->x2,y2]
-        arrow_matches = re.finditer(r"\[ARROW:\s*(\d+)\s*,\s*(\d+)\s*->\s*(\d+)\s*,\s*(\d+)\s*\]", text)
-        for m in arrow_matches:
-            self.annotation_requested.emit("arrow", [
-                float(m.group(1)), float(m.group(2)), float(m.group(3)), float(m.group(4))
-            ])
+        for m in _ARROW_RE.finditer(text):
+            x1, y1 = self._map_model_coords(float(m.group(1)), float(m.group(2)))
+            x2, y2 = self._map_model_coords(float(m.group(3)), float(m.group(4)))
+            self.annotation_requested.emit("arrow", [x1, y1, x2, y2])
 
         # [CIRCLE:x,y,r:label]
-        circle_matches = re.finditer(r"\[CIRCLE:\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)\s*(?:[:,]\s*[\"']?([^\"'\]]*)[\"']?)?\s*\]", text)
-        for m in circle_matches:
-            self.annotation_requested.emit("circle", [
-                float(m.group(1)), float(m.group(2)), float(m.group(3)), (m.group(4) or "").strip().strip("\"'")
-            ])
+        for m in _CIRCLE_RE.finditer(text):
+            x, y = self._map_model_coords(float(m.group(1)), float(m.group(2)))
+            radius = self._map_model_scale(float(m.group(3)))
+            self.annotation_requested.emit(
+                "circle", [x, y, radius, (m.group(4) or "").strip().strip("\"'")]
+            )
+
+        # [LABEL:x,y:text]
+        for m in _LABEL_RE.finditer(text):
+            x, y = self._map_model_coords(float(m.group(1)), float(m.group(2)))
+            label = (m.group(3) or "").strip().strip("\"'")
+            if label:
+                self.annotation_requested.emit("label", [x, y, label])
 
         # Clean tags from text for human display in HUD
-        clean_text = re.sub(r"\[(POINT|ARROW|CIRCLE|LABEL|UNDERLINE):[^\]]*\]", "", text).strip()
+        clean_text = _TAG_RE.sub("", text).strip()
         if not clean_text and first_label:
             clean_text = f"Pointing to {first_label} on your screen."
         elif not clean_text:
             clean_text = "Here it is on your screen."
         return clean_text
-
-        # [LABEL:x,y:text]
-        label_matches = re.finditer(r"\[LABEL:(\d+),(\d+):([^\]]*)\]", text)
-        for m in label_matches:
-            self.annotation_requested.emit("label", [
-                float(m.group(1)), float(m.group(2)), m.group(3)
-            ])
 
     def _handle_annotation(self, kind: str, args: list):
         if kind == "arrow":

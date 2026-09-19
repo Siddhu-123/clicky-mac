@@ -4,6 +4,7 @@ Automated unit tests for Clicky macOS (Apple MLX Edition).
 
 import asyncio
 import os
+import sys
 import tempfile
 import unittest
 from pathlib import Path
@@ -15,6 +16,7 @@ from ai.universal_locator import UniversalLocator
 from ai.web_search import WebSearcher
 from audio.tts.edge_tts_provider import EdgeTTSProvider, clean_text_for_speech
 from agent.tools import AgentTools
+from agent.runtime import AgentRuntime
 from ai.mlx_engine import MLXEngine
 
 
@@ -97,6 +99,110 @@ class TestClickyMacOS(unittest.TestCase):
         engine = MLXEngine()
         self.assertEqual(engine.provider_name, "mlx")
         self.assertIn("Qwen", engine.model_id)
+
+    def test_parse_action_robust(self):
+        """Action parsing must respect quotes and nested parens inside values."""
+        rt = AgentRuntime(provider=None)
+
+        # Normal keyword args
+        tool, kwargs = rt._parse_action(
+            'Thought: run it.\nAction: bash_run(command="echo hello clicky")'
+        )
+        self.assertEqual(tool, "bash_run")
+        self.assertEqual(kwargs["command"], "echo hello clicky")
+
+        # Parens and quote inside a quoted value must not truncate parsing
+        tool, kwargs = rt._parse_action(
+            'Action: file_write(file_path="a b.txt", content="hello, world!)")'
+        )
+        self.assertEqual(tool, "file_write")
+        self.assertEqual(kwargs["file_path"], "a b.txt")
+        self.assertEqual(kwargs["content"], "hello, world!)")
+
+    def test_agent_runtime_uses_assistant_role_history(self):
+        """MLX Qwen chat template renders <|im_start|>assistant, not 'model'."""
+        rt = AgentRuntime(provider=None)
+
+        recorded = []
+        calls = {"n": 0}
+
+        async def _fake_ask(self, prompt, system_prompt, screenshots=None, history=None):
+            recorded.extend(history or [])
+            calls["n"] += 1
+            if calls["n"] == 1:
+                return 'Thought: list the files.\nAction: bash_run(command="ls")'
+            return "Thought: done.\nFinal Answer: all set"
+
+        rt.provider = type("P", (), {"ask": _fake_ask})()
+        result = asyncio.run(rt.run("list files"))
+        self.assertTrue(recorded)
+        roles = {m["role"] for m in recorded}
+        self.assertIn("user", roles)
+        self.assertIn("assistant", roles)
+        self.assertNotIn("model", roles)
+        self.assertIn("all set", result)
+
+    def test_parse_and_dispatch_tags_scales_coordinates(self):
+        """Tags must be dispatched with model coords scaled into logical points."""
+        from PyQt6.QtWidgets import QApplication
+        from PIL import Image
+        from companion_manager import CompanionManager
+        from screen.capture import ScreenShot
+
+        app = QApplication.instance() or QApplication(sys.argv)
+        # NOTE: create the manager inline; creating it via a helper method lets
+        # PyQt destroy the parentless QObject before its signals can be used.
+        mgr = CompanionManager()
+        self.addCleanup(mgr.quit_app)
+        # Image the model sees is 1280px wide, display is 2560 logical points
+        # (simulates a 2x physical->logical mapping after downscale).
+        mgr._last_view_screenshot = ScreenShot(
+            index=1,
+            width=1280,
+            height=720,
+            base64_jpeg="",
+            physical_width=5120,
+            physical_height=2880,
+            physical_left=0,
+            physical_top=0,
+            dpi_scale=2.0,
+            logical_left=0,
+            logical_top=0,
+            logical_width=2560,
+            logical_height=1440,
+            pil_image=Image.new("RGB", (1280, 720), "white"),
+        )
+
+        points, annotations = [], []
+        mgr.point_requested.connect(lambda x, y, l: points.append((x, y, l)))
+        mgr.annotation_requested.connect(lambda k, a: annotations.append((k, a)))
+
+        clean = mgr._parse_and_dispatch_tags(
+            "[POINT:640,360:Save] [ARROW:0,0->100,100] "
+            "[CIRCLE:320,180,40:ring] [LABEL:100,200:Note]"
+        )
+
+        # POINT scaled 640,360 -> 1280,720
+        self.assertEqual(points, [(1280.0, 720.0, "Save")])
+        kinds = {a[0]: a[1] for a in annotations}
+        self.assertEqual(kinds["arrow"], [0.0, 0.0, 200.0, 200.0])
+        self.assertEqual(kinds["circle"], [640.0, 360.0, 80.0, "ring"])
+        self.assertEqual(kinds["label"], [200.0, 400.0, "Note"])
+        # Non-tag text is preserved, tag-only text falls back to a label
+        self.assertIn("Save", clean)
+
+    def test_parse_and_dispatch_tags_label_is_reached(self):
+        """LABEL annotations were previously dead code after an early return."""
+        from PyQt6.QtWidgets import QApplication
+        from companion_manager import CompanionManager
+
+        app = QApplication.instance() or QApplication(sys.argv)
+        mgr = CompanionManager()
+        self.addCleanup(mgr.quit_app)
+        annotations = []
+        mgr.annotation_requested.connect(lambda k, a: annotations.append(k))
+        mgr._parse_and_dispatch_tags("[LABEL:10,20:Hello Label]")
+        self.assertIn("label", annotations)
 
 
 if __name__ == "__main__":
