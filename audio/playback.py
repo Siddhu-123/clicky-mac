@@ -32,22 +32,23 @@ class AudioPlayer:
             with self._lock:
                 self._is_playing = True
                 try:
-                    self._current_process = subprocess.Popen(
+                    proc = subprocess.Popen(
                         ["afplay", path_str],
                         stdout=subprocess.DEVNULL,
                         stderr=subprocess.DEVNULL,
                     )
+                    self._current_process = proc
                 except Exception as e:
                     print(f"[AudioPlayer] Failed to launch afplay: {e}")
                     self._is_playing = False
                     return
 
-            if self._current_process:
-                self._current_process.wait()
+            proc.wait()
 
             with self._lock:
-                self._is_playing = False
-                self._current_process = None
+                if self._current_process is proc:
+                    self._is_playing = False
+                    self._current_process = None
 
             if on_finished:
                 try:

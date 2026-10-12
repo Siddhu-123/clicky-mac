@@ -15,7 +15,7 @@ from ai.base_provider import BaseAIProvider
 from config import cfg
 
 # Matches key="value" | key='value' | key=plain
-_ARG_RE = re.compile(r'([a-zA-Z0-9_]+)\s*=\s*(?:"([^"]*)"|\'([^\']*)\'|([^,)]*))')
+_ARG_RE = re.compile(r'([a-zA-Z0-9_]+)\s*=\s*(?:"((?:[^"\\]|\\.)*)"|\'((?:[^\'\\]|\\.)*)\'|([^,)]*))')
 
 AGENT_SYSTEM_PROMPT = """You are HeyClicky Agent, an autonomous macOS assistant.
 You can execute tasks by thinking step-by-step and invoking available tools.
@@ -96,6 +96,8 @@ class AgentRuntime:
         for m in _ARG_RE.finditer("".join(raw_args)):
             k = m.group(1)
             v = m.group(2) if m.group(2) is not None else (m.group(3) if m.group(3) is not None else m.group(4))
+            if isinstance(v, str) and (m.group(2) is not None or m.group(3) is not None):
+                v = re.sub(r'\\(["\'\\])', r'\1', v)
             kwargs[k] = v.strip() if isinstance(v, str) else v
 
         return tool_name, kwargs

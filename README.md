@@ -116,7 +116,7 @@ python3 -m unittest tests/test_clicky.py
 - Apple Silicon only: inference runs on MLX / Metal.
 - Pointing accuracy depends on the small 2B/3B vision model; the 7B option is more reliable but needs ~5.5 GB of RAM.
 - Agent Mode runs shell commands and simulated clicks on your Mac. Review what you ask it to do.
-- Screenshots are processed on-device by the local model. Avoid asking questions while sensitive windows (password managers, banking) are on screen.
+- Screenshots are processed on-device by the local model. In talk mode no screenshot is taken when the frontmost window title looks sensitive (password managers, sign-in or banking pages). This is a keyword match on the title, so it can miss some windows.
 
 ## Licence
 

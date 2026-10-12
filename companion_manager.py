@@ -7,11 +7,13 @@ smooth bezier pointing, and HeyClicky Max Agent Mode.
 from __future__ import annotations
 
 import asyncio
+import concurrent.futures
 import os
 import re
 import tempfile
 import threading
 import time
+import traceback
 from typing import Dict, List, Optional
 
 from PyQt6.QtCore import QObject, QTimer, pyqtSignal
@@ -28,7 +30,7 @@ from config import cfg, cfg_manager
 from hotkey import GlobalHotkeyMonitor
 from screen.capture import ScreenShot, capture_all_screens
 import subprocess
-from tutor import active_window_title, app_key, is_agent, is_locate, is_repeat, is_stop, parse_open_app
+from tutor import active_window_title, app_key, is_agent, is_locate, is_repeat, is_sensitive_window, is_stop, parse_open_app
 from ui.overlay import OverlayWindow
 from ui.panel import CompanionPanel
 from ui.settings_dialog import SettingsDialog
@@ -157,8 +159,9 @@ class CompanionManager(QObject):
                 self.status_changed.emit("Loading MLX Model...", "thinking")
                 self.mlx_engine.ensure_model_loaded()
                 self.status_changed.emit("Ready", "normal")
-            except Exception:
-                pass
+            except Exception as e:
+                message = str(e).strip() or type(e).__name__
+                self.status_changed.emit(f"Error: {message}", "normal")
 
         threading.Thread(target=_warmup, daemon=True).start()
 
@@ -193,7 +196,8 @@ class CompanionManager(QObject):
             return
 
         self.status_changed.emit("Thinking...", "thinking")
-        asyncio.run_coroutine_threadsafe(self._process_turn(audio_data), self._loop)
+        future = asyncio.run_coroutine_threadsafe(self._process_turn(audio_data), self._loop)
+        future.add_done_callback(self._handle_turn_future)
 
     def on_text_query(self, text: str):
         query = text.strip()
@@ -202,7 +206,18 @@ class CompanionManager(QObject):
         self.player.stop()
         self.query_received.emit(query)
         self.status_changed.emit("Thinking...", "thinking")
-        asyncio.run_coroutine_threadsafe(self._process_query_turn(query), self._loop)
+        future = asyncio.run_coroutine_threadsafe(self._process_query_turn(query), self._loop)
+        future.add_done_callback(self._handle_turn_future)
+
+    def _handle_turn_future(self, future: concurrent.futures.Future):
+        if future.cancelled():
+            return
+        error = future.exception()
+        if error is None:
+            return
+        traceback.print_exception(type(error), error, error.__traceback__)
+        message = str(error).strip() or type(error).__name__
+        self.status_changed.emit(f"Error: {message}", "normal")
 
     def on_cancel(self):
         self._is_recording = False
@@ -258,11 +273,15 @@ class CompanionManager(QObject):
 
     async def _run_talk_pipeline(self, query: str):
         window_title = active_window_title()
-        screenshots = capture_all_screens(max_width=cfg.max_screenshot_width)
-        self._last_view_screenshot = screenshots[0] if screenshots else None
+        if is_sensitive_window(window_title):
+            screenshots = []
+            self._last_view_screenshot = None
+        else:
+            screenshots = capture_all_screens(max_width=cfg.max_screenshot_width)
+            self._last_view_screenshot = screenshots[0] if screenshots else None
 
         k = app_key(window_title)
-        history = self.app_histories.setdefault(k, [])[-6:]
+        history = self.app_histories.setdefault(k, [])
 
         sys_prompt = CLICKY_SYSTEM_PROMPT.format(window_title=window_title)
 
@@ -273,7 +292,7 @@ class CompanionManager(QObject):
                 sys_prompt += f"\n\nWeb Information:\n{search_context}"
 
         self.status_changed.emit("MLX Inferencing...", "thinking")
-        response = await self.mlx_engine.ask(query, sys_prompt, screenshots, history)
+        response = await self.mlx_engine.ask(query, sys_prompt, screenshots, history[-6:])
 
         # Update history
         history.append({"role": "user", "content": query})

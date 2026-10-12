@@ -6,6 +6,7 @@ Includes shell commands, file manipulation, web browsing, AppleScript, and GUI c
 from __future__ import annotations
 
 import os
+import signal
 import subprocess
 import time
 from pathlib import Path
@@ -36,24 +37,29 @@ class AgentTools:
         """Runs a shell command on macOS and returns combined stdout and stderr."""
         cwd = cls.get_workspace_dir()
         try:
-            res = subprocess.run(
+            with subprocess.Popen(
                 ["/bin/zsh", "-c", command],
                 cwd=str(cwd),
-                capture_output=True,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
                 text=True,
-                timeout=timeout,
-            )
-            out = res.stdout
-            err = res.stderr
-            code = res.returncode
-            output = f"Exit code: {code}\n"
-            if out:
-                output += f"Output:\n{out}\n"
-            if err:
-                output += f"Error:\n{err}\n"
-            return output.strip()
-        except subprocess.TimeoutExpired:
-            return f"Command timed out after {timeout} seconds."
+                start_new_session=True,
+            ) as proc:
+                try:
+                    out, err = proc.communicate(timeout=timeout)
+                except subprocess.TimeoutExpired:
+                    try:
+                        os.killpg(proc.pid, signal.SIGKILL)
+                    except Exception:
+                        pass
+                    return f"Command timed out after {timeout} seconds."
+                code = proc.returncode
+                output = f"Exit code: {code}\n"
+                if out:
+                    output += f"Output:\n{out}\n"
+                if err:
+                    output += f"Error:\n{err}\n"
+                return output.strip()
         except Exception as e:
             return f"Error executing command: {e}"
 
@@ -112,16 +118,36 @@ class AgentTools:
         headers = {"User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)"}
         async with httpx.AsyncClient(timeout=15.0, follow_redirects=True) as client:
             try:
-                resp = await client.get(url, headers=headers)
-                if resp.status_code != 200:
-                    return f"HTTP error {resp.status_code}"
-                import re
-                text = resp.text
-                # Simple strip tags
-                text = re.sub(r"<(script|style)[^>]*>[\s\S]*?</\1>", "", text, flags=re.I)
-                clean = re.sub(r"<[^>]+>", " ", text)
-                clean = re.sub(r"\s+", " ", clean).strip()
-                return clean[:4000]
+                async with client.stream("GET", url, headers=headers) as resp:
+                    if resp.status_code != 200:
+                        return f"HTTP error {resp.status_code}"
+                    max_bytes = 2000000
+                    body = bytearray()
+                    truncated = False
+                    async for chunk in resp.aiter_bytes():
+                        remaining = max_bytes - len(body)
+                        if len(chunk) >= remaining:
+                            body.extend(chunk[:remaining])
+                            truncated = True
+                            break
+                        body.extend(chunk)
+
+                    encoding = resp.encoding or "utf-8"
+                    try:
+                        text = body.decode(encoding, errors="replace")
+                    except (LookupError, TypeError):
+                        text = body.decode("utf-8", errors="replace")
+
+                    import re
+                    # Simple strip tags
+                    text = re.sub(r"<(script|style)[^>]*>[\s\S]*?</\1>", "", text, flags=re.I)
+                    clean = re.sub(r"<[^>]+>", " ", text)
+                    clean = re.sub(r"\s+", " ", clean).strip()
+
+                    result = clean[:4000].rstrip()
+                    if truncated:
+                        return f"{result}\n[truncated]" if result else "[truncated]"
+                    return clean[:4000]
             except Exception as e:
                 return f"Error fetching {url}: {e}"
 
@@ -167,11 +193,11 @@ class AgentTools:
         try:
             for char in text:
                 event_down = Quartz.CGEventCreateKeyboardEvent(None, 0, True)
-                Quartz.CGEventKeyboardSetUnicodeString(event_down, len(char), char)
+                Quartz.CGEventKeyboardSetUnicodeString(event_down, len(char.encode("utf-16-le")) // 2, char)
                 Quartz.CGEventPost(Quartz.kCGHIDEventTap, event_down)
 
                 event_up = Quartz.CGEventCreateKeyboardEvent(None, 0, False)
-                Quartz.CGEventKeyboardSetUnicodeString(event_up, len(char), char)
+                Quartz.CGEventKeyboardSetUnicodeString(event_up, len(char.encode("utf-16-le")) // 2, char)
                 Quartz.CGEventPost(Quartz.kCGHIDEventTap, event_up)
                 time.sleep(0.01)
             return f"Typed: {text}"
