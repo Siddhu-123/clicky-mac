@@ -33,3 +33,6 @@ dist/
 build/
 *.egg-info/
 
+
+# Local audit notes
+bugs.md

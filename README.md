@@ -57,12 +57,15 @@
 
 ### 1. Launch Clicky
 
-Open your terminal in this repository and run:
+Requires an Apple Silicon Mac running macOS with Python 3.11+. Clone the repository and run:
 
 ```bash
-cd /Users/sidslaptop/dev/clicky-mac
+git clone https://github.com/Siddhu-123/clicky-mac.git
+cd clicky-mac
 ./run.sh
 ```
+
+The first run creates `.venv`, installs `requirements.txt` and builds `dist/Clicky.app` so macOS permissions are scoped to the app. Optional settings live in `.env` (copy `.env.example`).
 
 *(On the very first launch, MLX will download the lightweight 4-bit weights from Hugging Face and cache them locally in `~/.cache/huggingface/hub/`.)*
 
@@ -105,3 +108,16 @@ Run the automated test suite:
 source .venv/bin/activate
 python3 -m unittest tests/test_clicky.py
 ```
+
+---
+
+## Known limitations
+
+- Apple Silicon only: inference runs on MLX / Metal.
+- Pointing accuracy depends on the small 2B/3B vision model; the 7B option is more reliable but needs ~5.5 GB of RAM.
+- Agent Mode runs shell commands and simulated clicks on your Mac. Review what you ask it to do.
+- Screenshots are processed on-device by the local model. Avoid asking questions while sensitive windows (password managers, banking) are on screen.
+
+## Licence
+
+MIT. See [LICENSE](LICENSE).
